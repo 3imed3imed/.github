@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#3730a3"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<title>MAKNABIS — المالية</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: { tajawal: ['Tajawal', 'sans-serif'] },
+      colors: {
+        brand: {
+          50:  '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe',
+          300: '#a5b4fc', 400: '#818cf8', 500: '#6366f1',
+          600: '#4f46e5', 700: '#4338ca', 800: '#3730a3', 900: '#312e81'
+        }
+      }
+    }
+  }
+};
+</script>
+<style>
+  * { font-family: 'Tajawal', sans-serif; }
+  body { background: #f1f5f9; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+  .card { background: white; border-radius: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .btn-primary {
+    background: linear-gradient(135deg, #4f46e5, #3730a3);
+    color: white; border-radius: .75rem; padding: .75rem 1.5rem;
+    font-weight: 700; font-size: 1rem; border: none; cursor: pointer;
+    transition: opacity .15s;
+  }
+  .btn-primary:hover { opacity: .9; }
+  .btn-primary:active { opacity: .8; }
+  .btn-secondary {
+    background: #f1f5f9; color: #374151; border-radius: .75rem;
+    padding: .75rem 1.5rem; font-weight: 600; font-size: .95rem;
+    border: 1px solid #e2e8f0; cursor: pointer; transition: background .15s;
+  }
+  .btn-secondary:hover { background: #e2e8f0; }
+  .form-input {
+    width: 100%; border: 1.5px solid #e2e8f0; border-radius: .625rem;
+    padding: .625rem .875rem; font-size: .95rem; font-family: 'Tajawal', sans-serif;
+    background: #f8fafc; transition: border-color .15s;
+    direction: rtl; text-align: right;
+  }
+  .form-input:focus { outline: none; border-color: #6366f1; background: white; }
+  .form-label { font-size: .85rem; font-weight: 600; color: #374151; margin-bottom: .25rem; display: block; }
+  .quick-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .375rem; padding: .875rem .5rem; border-radius: .875rem; cursor: pointer;
+    border: none; font-family: 'Tajawal', sans-serif; font-weight: 700; font-size: .8rem;
+    transition: transform .1s, box-shadow .1s;
+  }
+  .quick-btn:active { transform: scale(.96); }
+  .quick-btn .icon { font-size: 1.6rem; }
+  .kpi-card {
+    background: white; border-radius: 1rem; padding: 1rem;
+    border-right: 4px solid; box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  }
+  .toast {
+    position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+    background: #1e1b4b; color: white; padding: .75rem 1.5rem; border-radius: .75rem;
+    font-weight: 600; font-size: .9rem; z-index: 9999; opacity: 0;
+    transition: opacity .3s; pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+  .spinner {
+    width: 1.25rem; height: 1.25rem; border: 2.5px solid rgba(255,255,255,.4);
+    border-top-color: white; border-radius: 50%; animation: spin .7s linear infinite;
+    display: inline-block; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .nav-bottom {
+    position: fixed; bottom: 0; right: 0; left: 0;
+    background: white; border-top: 1px solid #e2e8f0;
+    display: flex; z-index: 100; padding-bottom: env(safe-area-inset-bottom);
+  }
+  .nav-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    padding: .6rem .25rem; gap: .2rem; cursor: pointer; border: none; background: transparent;
+    font-family: 'Tajawal', sans-serif; font-size: .7rem; font-weight: 600; color: #94a3b8;
+    transition: color .15s;
+  }
+  .nav-btn.active { color: #4f46e5; }
+  .nav-btn .nav-icon { font-size: 1.3rem; }
+  .page-header {
+    background: linear-gradient(135deg, #4f46e5, #3730a3);
+    color: white; padding: 1rem 1.25rem; display: flex; align-items: center; gap: .75rem;
+    position: sticky; top: 0; z-index: 50;
+  }
+  .page-header h2 { font-size: 1.1rem; font-weight: 700; flex: 1; }
+  .back-btn {
+    background: rgba(255,255,255,.15); border: none; color: white;
+    border-radius: .5rem; padding: .4rem .75rem; cursor: pointer; font-size: .9rem;
+    font-family: 'Tajawal', sans-serif; font-weight: 600;
+  }
+  .tag {
+    display: inline-block; border-radius: 999px; padding: .2rem .75rem;
+    font-size: .75rem; font-weight: 700;
+  }
+  .cycle-badge {
+    background: linear-gradient(135deg, #6366f1, #4338ca);
+    color: white; border-radius: .75rem; padding: .5rem 1rem;
+    display: flex; align-items: center; gap: .5rem; font-weight: 700;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+  th { background: #f8fafc; color: #4b5563; font-weight: 700; padding: .5rem .75rem; text-align: right; }
+  td { padding: .5rem .75rem; border-top: 1px solid #f1f5f9; color: #374151; }
+  tr:hover td { background: #f8fafc; }
+  .overflow-auto { overflow-x: auto; }
+  select.form-input { appearance: none; -webkit-appearance: none; cursor: pointer; }
+  .section-title { font-size: .95rem; font-weight: 700; color: #1e1b4b; margin-bottom: .75rem; display: flex; align-items: center; gap: .5rem; }
+</style>
+<script src="config.js"></script>
+</head>
+<body class="min-h-screen">
+
+<!-- ══════════════════════════════ TOAST ══════════════════════════════ -->
+<div id="toast" class="toast"></div>
+
+<!-- ══════════════════════════════ LOGIN SCREEN ══════════════════════ -->
+<div id="screen-login" class="screen active min-h-screen flex flex-col">
+  <div style="background: linear-gradient(160deg,#312e81,#4f46e5); min-height: 38vh;"
+       class="flex flex-col items-center justify-center px-6 pb-10 pt-16 text-white">
+    <div style="font-size:3.5rem;">🍄</div>
+    <h1 class="text-3xl font-black mt-3 tracking-wide">MAKNABIS</h1>
+    <p class="text-indigo-200 font-medium mt-1 text-sm">نظام إدارة المالية</p>
+  </div>
+  <div class="flex-1 bg-white rounded-t-3xl -mt-6 px-6 pt-8 pb-28">
+    <h2 class="text-xl font-black text-gray-800 mb-1">تسجيل الدخول</h2>
+    <p class="text-sm text-gray-400 mb-6">أدخل بياناتك للمتابعة</p>
+
+    <div class="space-y-4">
+      <div>
+        <label class="form-label">اسم العامل</label>
+        <input id="login-worker" type="text" class="form-input" placeholder="اسمك الكامل"/>
+      </div>
+      <div>
+        <label class="form-label">كلمة المرور</label>
+        <input id="login-password" type="password" class="form-input" placeholder="كلمة المرور"/>
+      </div>
+      <details class="mt-1">
+        <summary class="text-xs text-indigo-500 cursor-pointer font-semibold select-none">إعدادات متقدمة</summary>
+        <div class="mt-3">
+          <label class="form-label">رابط API</label>
+          <input id="login-url" type="url" class="form-input text-xs" placeholder="https://script.google.com/..."/>
+        </div>
+      </details>
+    </div>
+
+    <button onclick="doLogin()" class="btn-primary w-full mt-7 flex items-center justify-center gap-2" id="login-btn">
+      <span>دخول</span>
+    </button>
+    <div id="login-error" class="text-red-500 text-sm font-semibold mt-3 text-center hidden"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ HOME SCREEN ════════════════════════ -->
+<div id="screen-home" class="screen pb-24">
+  <!-- Header -->
+  <div style="background: linear-gradient(135deg,#4f46e5,#3730a3);" class="px-5 pt-10 pb-5 text-white">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-indigo-200 text-sm font-medium">مرحباً،</p>
+        <h1 class="text-xl font-black" id="home-worker-name">—</h1>
+      </div>
+      <div class="text-3xl">💰</div>
+    </div>
+    <!-- Cycle banner -->
+    <div id="cycle-banner" class="mt-4"></div>
+  </div>
+
+  <div class="px-4 mt-5 space-y-5">
+    <!-- KPI Cards -->
+    <div>
+      <div class="section-title">📊 إحصائيات اليوم</div>
+      <div class="grid grid-cols-2 gap-3" id="kpi-grid">
+        <div class="kpi-card" style="border-color:#6366f1;">
+          <div class="text-xs text-gray-500 font-medium">مبيعات اليوم</div>
+          <div class="text-xl font-black text-indigo-700 mt-1" id="kpi-sales">...</div>
+          <div class="text-xs text-gray-400 mt-1">دينار تونسي</div>
+        </div>
+        <div class="kpi-card" style="border-color:#f59e0b;">
+          <div class="text-xs text-gray-500 font-medium">مشتريات اليوم</div>
+          <div class="text-xl font-black text-amber-600 mt-1" id="kpi-purchases">...</div>
+          <div class="text-xs text-gray-400 mt-1">دينار تونسي</div>
+        </div>
+        <div class="kpi-card" style="border-color:#10b981;">
+          <div class="text-xs text-gray-500 font-medium">أجور اليوم</div>
+          <div class="text-xl font-black text-emerald-600 mt-1" id="kpi-payroll">...</div>
+          <div class="text-xs text-gray-400 mt-1">دينار تونسي</div>
+        </div>
+        <div class="kpi-card" style="border-color:#ef4444;">
+          <div class="text-xs text-gray-500 font-medium">مصاريف اليوم</div>
+          <div class="text-xl font-black text-red-600 mt-1" id="kpi-operating">...</div>
+          <div class="text-xs text-gray-400 mt-1">دينار تونسي</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div>
+      <div class="section-title">⚡ إضافة سريعة</div>
+      <div class="grid grid-cols-4 gap-2">
+        <button class="quick-btn" style="background:#eef2ff;color:#4f46e5;" onclick="showForm('sale')">
+          <span class="icon">💵</span><span>مبيعات</span>
+        </button>
+        <button class="quick-btn" style="background:#fef3c7;color:#b45309;" onclick="showForm('purchase')">
+          <span class="icon">🛒</span><span>مشتريات</span>
+        </button>
+        <button class="quick-btn" style="background:#d1fae5;color:#065f46;" onclick="showForm('payroll')">
+          <span class="icon">👷</span><span>أجور</span>
+        </button>
+        <button class="quick-btn" style="background:#fee2e2;color:#991b1b;" onclick="showForm('operating')">
+          <span class="icon">📋</span><span>مصاريف</span>
+        </button>
+        <button class="quick-btn" style="background:#ede9fe;color:#5b21b6;" onclick="showForm('production')">
+          <span class="icon">🍄</span><span>إنتاج</span>
+        </button>
+        <button class="quick-btn" style="background:#fce7f3;color:#9d174d;" onclick="showForm('construction')">
+          <span class="icon">🏗️</span><span>بناء</span>
+        </button>
+        <button class="quick-btn" style="background:#e0f2fe;color:#0369a1;" onclick="showForm('inventory')">
+          <span class="icon">📦</span><span>مخزون</span>
+        </button>
+        <button class="quick-btn" style="background:#f0fdf4;color:#166534;" onclick="loadRecent()">
+          <span class="icon">🔄</span><span>تحديث</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Recent Transactions -->
+    <div>
+      <div class="section-title">📜 آخر العمليات</div>
+      <div id="recent-sheet-selector" class="mb-3">
+        <select class="form-input" onchange="loadRecent(this.value)" id="recent-sheet-select">
+          <option value="SALES">مبيعات</option>
+          <option value="PURCHASES">مشتريات</option>
+          <option value="PAYROLL">أجور</option>
+          <option value="OPERATING">مصاريف تشغيل</option>
+          <option value="PRODUCTION">إنتاج</option>
+          <option value="CONSTRUCTION">بناء</option>
+          <option value="INVENTORY">مخزون</option>
+        </select>
+      </div>
+      <div class="card overflow-hidden">
+        <div class="overflow-auto">
+          <table id="recent-table">
+            <tbody id="recent-tbody">
+              <tr><td class="text-center text-gray-400 py-6">جاري التحميل...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ FORM SCREEN ════════════════════════ -->
+<div id="screen-form" class="screen pb-24">
+  <div class="page-header">
+    <button class="back-btn" onclick="goHome()">← رجوع</button>
+    <h2 id="form-title">نموذج</h2>
+  </div>
+  <div class="px-4 mt-4">
+    <div id="form-cycle-info" class="mb-3 hidden">
+      <div class="cycle-badge text-sm">
+        <span>🔄</span>
+        <span id="form-cycle-label">—</span>
+      </div>
+    </div>
+    <form id="main-form" onsubmit="submitForm(event)" class="card p-5 space-y-4">
+      <div id="form-fields"></div>
+      <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2" id="submit-btn">
+        <span id="submit-label">حفظ</span>
+      </button>
+      <div id="form-error" class="text-red-500 text-sm font-semibold text-center hidden"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ NAV BAR ════════════════════════════ -->
+<nav class="nav-bottom" id="main-nav" style="display:none;">
+  <button class="nav-btn active" id="nav-home" onclick="goHome()">
+    <span class="nav-icon">🏠</span><span>الرئيسية</span>
+  </button>
+  <button class="nav-btn" onclick="showForm('sale')">
+    <span class="nav-icon">💵</span><span>مبيعات</span>
+  </button>
+  <button class="nav-btn" onclick="showForm('purchase')">
+    <span class="nav-icon">🛒</span><span>مشتريات</span>
+  </button>
+  <button class="nav-btn" onclick="showForm('payroll')">
+    <span class="nav-icon">👷</span><span>أجور</span>
+  </button>
+  <button class="nav-btn" id="nav-logout" onclick="doLogout()">
+    <span class="nav-icon">🚪</span><span>خروج</span>
+  </button>
+</nav>
+
+<script>
+// ════════════════════ STATE ════════════════════
+const state = {
+  apiUrl: '',
+  password: '',
+  workerName: '',
+  activeCycle: null,
+  availableCycles: [],
+  activeView: 'home',
+  currentForm: null
+};
+
+// ════════════════════ INIT ════════════════════
+(function init() {
+  // Auto-fill from config.js
+  if (window.FARM_CONFIG) {
+    state.apiUrl   = window.FARM_CONFIG.FINANCE_URL     || '';
+    state.password = window.FARM_CONFIG.FINANCE_PASSWORD|| '';
+  }
+  // Override with localStorage if present
+  state.apiUrl     = localStorage.getItem('fin_api_url') || state.apiUrl;
+  state.password   = localStorage.getItem('fin_password')|| state.password;
+  state.workerName = localStorage.getItem('fin_worker')  || '';
+
+  document.getElementById('login-url').value      = state.apiUrl;
+  document.getElementById('login-password').value = state.password;
+  document.getElementById('login-worker').value   = state.workerName;
+
+  // If returning user, auto-check session
+  if (state.workerName && state.apiUrl && state.password) {
+    autoLogin();
+  }
+})();
+
+// ════════════════════ API ════════════════════
+async function api(action, data) {
+  const resp = await fetch(state.apiUrl, {
+    method: 'POST',
+    redirect: 'follow',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action,
+      data: Object.assign(
+        { password: state.password, workerName: state.workerName },
+        state.activeCycle ? { cycleId: state.activeCycle.id } : {},
+        data || {}
+      )
+    })
+  });
+  const json = await resp.json();
+  return json.data !== undefined ? json.data : json;
+}
+
+// ════════════════════ TOAST ════════════════════
+function toast(msg, dur = 2800) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), dur);
+}
+
+// ════════════════════ SCREEN SWITCH ════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  const nav = document.getElementById('main-nav');
+  nav.style.display = (id === 'login') ? 'none' : 'flex';
+  state.activeView = id;
+}
+
+// ════════════════════ LOGIN ════════════════════
+async function autoLogin() {
+  try {
+    const r = await api('checkAuth', {});
+    if (r && (r.ok || r.authenticated || r.status === 'ok' || typeof r === 'object')) {
+      afterLogin();
+    }
+  } catch (e) { /* stay on login */ }
+}
+
+async function doLogin() {
+  const worker = document.getElementById('login-worker').value.trim();
+  const pass   = document.getElementById('login-password').value.trim();
+  const url    = document.getElementById('login-url').value.trim();
+
+  if (!worker) { showLoginError('الرجاء إدخال اسم العامل'); return; }
+  if (!pass)   { showLoginError('الرجاء إدخال كلمة المرور'); return; }
+  if (!url)    { showLoginError('الرجاء إدخال رابط API'); return; }
+
+  state.workerName = worker;
+  state.password   = pass;
+  state.apiUrl     = url;
+
+  const btn = document.getElementById('login-btn');
+  btn.innerHTML = '<span class="spinner"></span> جاري التحقق...';
+  btn.disabled = true;
+  hideLoginError();
+
+  try {
+    const r = await api('checkAuth', {});
+    const ok = r && (r.ok !== false);
+    if (ok) {
+      localStorage.setItem('fin_worker',   state.workerName);
+      localStorage.setItem('fin_password', state.password);
+      localStorage.setItem('fin_api_url',  state.apiUrl);
+      afterLogin();
+    } else {
+      showLoginError(r.error || r.message || 'كلمة المرور غير صحيحة');
+    }
+  } catch (e) {
+    showLoginError('خطأ في الاتصال: ' + e.message);
+  }
+  btn.innerHTML = '<span>دخول</span>';
+  btn.disabled = false;
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+function hideLoginError() {
+  document.getElementById('login-error').classList.add('hidden');
+}
+
+async function afterLogin() {
+  document.getElementById('home-worker-name').textContent = state.workerName;
+  showScreen('home');
+  loadCycles();
+  loadTodayStats();
+  loadRecent();
+}
+
+function doLogout() {
+  localStorage.removeItem('fin_worker');
+  state.workerName = '';
+  state.activeCycle = null;
+  state.availableCycles = [];
+  showScreen('login');
+  document.getElementById('login-worker').value = '';
+}
+
+// ════════════════════ CYCLES ════════════════════
+async function loadCycles() {
+  try {
+    const r = await api('listCycles', {});
+    const cycles = Array.isArray(r) ? r : (r.cycles || r.data || []);
+    state.availableCycles = cycles;
+
+    // pick active one
+    const active = cycles.find(c => c.status === 'active' || c.active === true || c.isActive);
+    if (active) state.activeCycle = active;
+    else if (cycles.length > 0) state.activeCycle = cycles[0];
+
+    renderCycleBanner();
+  } catch (e) {
+    document.getElementById('cycle-banner').innerHTML =
+      '<div class="text-indigo-200 text-xs">لم يتم تحميل الدورات</div>';
+  }
+}
+
+function renderCycleBanner() {
+  const banner = document.getElementById('cycle-banner');
+  if (!state.availableCycles.length) {
+    banner.innerHTML = '<div class="text-indigo-200 text-xs mt-1">لا توجد دورات متاحة</div>';
+    return;
+  }
+
+  if (state.availableCycles.length === 1) {
+    const c = state.availableCycles[0];
+    banner.innerHTML = `
+      <div class="cycle-badge">
+        <span>🔄</span>
+        <div>
+          <div class="font-black text-sm">${escHtml(c.name || c.cycleName || ('دورة #' + c.id))}</div>
+          <div class="text-indigo-200 text-xs">${escHtml(c.status || c.startDate || '')}</div>
+        </div>
+        <span class="tag" style="background:rgba(255,255,255,.2);font-size:.65rem;">نشطة</span>
+      </div>`;
+  } else {
+    const opts = state.availableCycles.map(c =>
+      `<option value="${escHtml(c.id)}" ${state.activeCycle && state.activeCycle.id === c.id ? 'selected' : ''}>
+        ${escHtml(c.name || c.cycleName || ('دورة #' + c.id))} — ${escHtml(c.status || '')}
+       </option>`
+    ).join('');
+    banner.innerHTML = `
+      <div class="mt-2">
+        <label class="text-indigo-200 text-xs font-semibold block mb-1">اختر الدورة</label>
+        <select class="form-input text-sm" onchange="selectCycle(this.value)" style="background:rgba(255,255,255,.15);color:white;border-color:rgba(255,255,255,.3);">
+          ${opts}
+        </select>
+      </div>`;
+  }
+}
+
+function selectCycle(id) {
+  const c = state.availableCycles.find(x => String(x.id) === String(id));
+  if (c) {
+    state.activeCycle = c;
+    toast('تم اختيار: ' + (c.name || c.cycleName || 'الدورة'));
+    loadTodayStats();
+    loadRecent();
+  }
+}
+
+// ════════════════════ TODAY STATS ════════════════════
+async function loadTodayStats() {
+  setKpi('sales','...');setKpi('purchases','...');setKpi('payroll','...');setKpi('operating','...');
+  try {
+    const r = await api('getTodayStats', {});
+    const d = r || {};
+    setKpi('sales',     fmt(d.sales     ?? d.SALES     ?? d.totalSales     ?? 0));
+    setKpi('purchases', fmt(d.purchases ?? d.PURCHASES ?? d.totalPurchases ?? 0));
+    setKpi('payroll',   fmt(d.payroll   ?? d.PAYROLL   ?? d.totalPayroll   ?? 0));
+    setKpi('operating', fmt(d.operating ?? d.OPERATING ?? d.totalOperating ?? 0));
+  } catch(e) {
+    setKpi('sales','—');setKpi('purchases','—');setKpi('payroll','—');setKpi('operating','—');
+  }
+}
+
+function setKpi(key, val) {
+  const el = document.getElementById('kpi-' + key);
+  if (el) el.textContent = val;
+}
+function fmt(v) {
+  const n = parseFloat(v);
+  if (isNaN(n)) return '—';
+  return n.toLocaleString('ar-TN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+}
+
+// ════════════════════ RECENT ════════════════════
+async function loadRecent(sheet) {
+  const sel = document.getElementById('recent-sheet-select');
+  const sheetName = sheet || (sel ? sel.value : 'SALES');
+  if (sel && sheet) sel.value = sheet;
+
+  const tbody = document.getElementById('recent-tbody');
+  tbody.innerHTML = '<tr><td class="text-center text-gray-400 py-5" colspan="10">جاري التحميل...</td></tr>';
+
+  try {
+    const r = await api('getRecent', { sheetName, limit: 20 });
+    const headers = r.headers || [];
+    const rows    = r.rows    || [];
+
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td class="text-center text-gray-400 py-5" colspan="10">لا توجد بيانات</td></tr>';
+      return;
+    }
+
+    // Build header row
+    const table = document.getElementById('recent-table');
+    let theadHtml = '<thead><tr>';
+    headers.forEach(h => { theadHtml += `<th>${escHtml(String(h))}</th>`; });
+    theadHtml += '</tr></thead>';
+    const existingThead = table.querySelector('thead');
+    if (existingThead) existingThead.remove();
+    table.insertAdjacentHTML('afterbegin', theadHtml);
+
+    // Build body rows
+    let html = '';
+    rows.forEach(r2 => {
+      const vals = r2.values || r2;
+      html += '<tr>';
+      (Array.isArray(vals) ? vals : Object.values(vals)).forEach(v => {
+        html += `<td>${escHtml(String(v ?? ''))}</td>`;
+      });
+      html += '</tr>';
+    });
+    tbody.innerHTML = html;
+  } catch(e) {
+    tbody.innerHTML = `<tr><td class="text-center text-red-400 py-5" colspan="10">خطأ: ${escHtml(e.message)}</td></tr>`;
+  }
+}
+
+// ════════════════════ FORMS ════════════════════
+const FORMS = {
+  sale: {
+    title: 'إضافة مبيعات',
+    action: 'addSale',
+    fields: [
+      { name: 'date',           label: 'التاريخ',          type: 'date',   required: true },
+      { name: 'product',        label: 'المنتج',            type: 'text',   required: true },
+      { name: 'client',         label: 'العميل',            type: 'text',   required: false },
+      { name: 'quantity_kg',    label: 'الكمية (كغ)',       type: 'number', required: true,  step: '0.001', onchange: 'calcSaleTotal' },
+      { name: 'price_per_kg',   label: 'سعر الكيلو (TND)', type: 'number', required: true,  step: '0.001', onchange: 'calcSaleTotal' },
+      { name: 'total',          label: 'المجموع (TND)',     type: 'number', required: false, step: '0.001', readonly: true, id: 'sale-total' },
+      { name: 'payment_method', label: 'طريقة الدفع',      type: 'select', required: false,
+        options: ['نقداً','تحويل بنكي','شيك','دين'] },
+      { name: 'channel',        label: 'قناة البيع',       type: 'text',   required: false },
+      { name: 'notes',          label: 'ملاحظات',          type: 'textarea', required: false }
+    ]
+  },
+  purchase: {
+    title: 'إضافة مشتريات',
+    action: 'addPurchase',
+    fields: [
+      { name: 'date',        label: 'التاريخ',          type: 'date',     required: true },
+      { name: 'item',        label: 'الصنف',            type: 'text',     required: true },
+      { name: 'supplier',    label: 'المورد',           type: 'text',     required: false },
+      { name: 'qty',         label: 'الكمية',           type: 'number',   required: true,  step: '0.001', onchange: 'calcPurchaseTotal' },
+      { name: 'unit',        label: 'الوحدة',           type: 'text',     required: false },
+      { name: 'unit_price',  label: 'سعر الوحدة (TND)',type: 'number',   required: true,  step: '0.001', onchange: 'calcPurchaseTotal' },
+      { name: 'total',       label: 'المجموع (TND)',    type: 'number',   required: false, step: '0.001', readonly: true, id: 'purchase-total' },
+      { name: 'category',    label: 'التصنيف',         type: 'select',   required: false,
+        options: ['بذور','تربة','سماد','مياه','كهرباء','تعبئة','نقل','أخرى'] },
+      { name: 'notes',       label: 'ملاحظات',         type: 'textarea', required: false }
+    ]
+  },
+  payroll: {
+    title: 'إضافة أجور',
+    action: 'addPayroll',
+    fields: [
+      { name: 'date',        label: 'التاريخ',          type: 'date',     required: true },
+      { name: 'worker_name', label: 'اسم العامل',       type: 'text',     required: true },
+      { name: 'period',      label: 'الفترة',           type: 'text',     required: false, placeholder: 'مثلاً: أسبوع 3' },
+      { name: 'amount',      label: 'المبلغ (TND)',     type: 'number',   required: true,  step: '0.001' },
+      { name: 'salary_type', label: 'نوع الأجر',        type: 'select',   required: false,
+        options: ['يومي','أسبوعي','شهري','قطعة'] },
+      { name: 'notes',       label: 'ملاحظات',         type: 'textarea', required: false }
+    ]
+  },
+  operating: {
+    title: 'إضافة مصاريف',
+    action: 'addOperating',
+    fields: [
+      { name: 'date',           label: 'التاريخ',        type: 'date',     required: true },
+      { name: 'item',           label: 'البند',          type: 'text',     required: true },
+      { name: 'category',       label: 'التصنيف',       type: 'select',   required: false,
+        options: ['إيجار','كهرباء','ماء','صيانة','نقل','تسويق','إداري','أخرى'] },
+      { name: 'amount',         label: 'المبلغ (TND)',   type: 'number',   required: true, step: '0.001' },
+      { name: 'payment_method', label: 'طريقة الدفع',   type: 'select',   required: false,
+        options: ['نقداً','تحويل بنكي','شيك','بطاقة'] },
+      { name: 'notes',          label: 'ملاحظات',       type: 'textarea', required: false }
+    ]
+  },
+  production: {
+    title: 'إضافة إنتاج',
+    action: 'addProduction',
+    fields: [
+      { name: 'date',         label: 'التاريخ',           type: 'date',     required: true },
+      { name: 'harvest_kg',   label: 'الحصاد (كغ)',       type: 'number',   required: true, step: '0.001', onchange: 'calcProductionRevenue' },
+      { name: 'type',         label: 'النوع',             type: 'select',   required: false,
+        options: ['أويستر','شيتاكي','محار','أخرى'] },
+      { name: 'price_per_kg', label: 'سعر الكيلو (TND)', type: 'number',   required: false, step: '0.001', onchange: 'calcProductionRevenue' },
+      { name: 'revenue',      label: 'الإيراد المتوقع',  type: 'number',   required: false, step: '0.001', readonly: true, id: 'production-revenue' },
+      { name: 'notes',        label: 'ملاحظات',          type: 'textarea', required: false }
+    ]
+  },
+  construction: {
+    title: 'إضافة بناء / تجهيز',
+    action: 'addConstruction',
+    fields: [
+      { name: 'date',     label: 'التاريخ',       type: 'date',     required: true },
+      { name: 'item',     label: 'العنصر',        type: 'text',     required: true },
+      { name: 'supplier', label: 'المورد',        type: 'text',     required: false },
+      { name: 'qty',      label: 'الكمية',        type: 'number',   required: false, step: '0.001', onchange: 'calcConstructionTotal' },
+      { name: 'unit',     label: 'الوحدة',        type: 'text',     required: false },
+      { name: 'cost',     label: 'التكلفة/وحدة', type: 'number',   required: false, step: '0.001', onchange: 'calcConstructionTotal' },
+      { name: 'total',    label: 'المجموع (TND)', type: 'number',   required: false, step: '0.001', readonly: true, id: 'construction-total' },
+      { name: 'notes',    label: 'ملاحظات',       type: 'textarea', required: false }
+    ]
+  },
+  inventory: {
+    title: 'حركة المخزون',
+    action: 'addInventory',
+    fields: [
+      { name: 'date',          label: 'التاريخ',       type: 'date',     required: true },
+      { name: 'item',          label: 'الصنف',         type: 'text',     required: true },
+      { name: 'quantity',      label: 'الكمية',        type: 'number',   required: true, step: '0.001' },
+      { name: 'unit',          label: 'الوحدة',        type: 'text',     required: false },
+      { name: 'movement_type', label: 'نوع الحركة',   type: 'select',   required: true,
+        options: ['إضافة','سحب'] },
+      { name: 'notes',         label: 'ملاحظات',       type: 'textarea', required: false }
+    ]
+  }
+};
+
+function showForm(formKey) {
+  const def = FORMS[formKey];
+  if (!def) return;
+  state.currentForm = formKey;
+
+  document.getElementById('form-title').textContent = def.title;
+
+  // Cycle info on form
+  const cycleInfo = document.getElementById('form-cycle-info');
+  const cycleLabel = document.getElementById('form-cycle-label');
+  if (state.activeCycle) {
+    cycleLabel.textContent = state.activeCycle.name || state.activeCycle.cycleName || ('دورة #' + state.activeCycle.id);
+    cycleInfo.classList.remove('hidden');
+  } else {
+    cycleInfo.classList.add('hidden');
+  }
+
+  // Render fields
+  const container = document.getElementById('form-fields');
+  container.innerHTML = '';
+  def.fields.forEach(f => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = renderField(f);
+    container.appendChild(wrap);
+  });
+
+  // Set today's date
+  const dateEl = container.querySelector('input[name="date"]');
+  if (dateEl) dateEl.value = todayISO();
+
+  // Pre-fill worker name in payroll
+  if (formKey === 'payroll') {
+    const wnEl = container.querySelector('input[name="worker_name"]');
+    if (wnEl) wnEl.value = state.workerName;
+  }
+
+  document.getElementById('form-error').classList.add('hidden');
+  document.getElementById('submit-label').textContent = 'حفظ — ' + def.title;
+
+  showScreen('form');
+
+  // Nav highlight
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+}
+
+function renderField(f) {
+  const onchAttr = f.onchange ? ` oninput="${f.onchange}()"` : '';
+  const readAttr = f.readonly ? ' readonly style="background:#f1f5f9;cursor:not-allowed;"' : '';
+  const idAttr   = f.id ? ` id="${f.id}"` : '';
+  const reqAttr  = f.required ? ' required' : '';
+  const ph       = f.placeholder ? ` placeholder="${escHtml(f.placeholder)}"` : '';
+
+  let input = '';
+  if (f.type === 'select') {
+    const opts = f.options.map(o => `<option value="${escHtml(o)}">${escHtml(o)}</option>`).join('');
+    input = `<select name="${f.name}" class="form-input"${reqAttr}${idAttr}><option value="">— اختر —</option>${opts}</select>`;
+  } else if (f.type === 'textarea') {
+    input = `<textarea name="${f.name}" class="form-input" rows="2"${ph}${reqAttr}${idAttr}></textarea>`;
+  } else {
+    const stepAttr = f.step ? ` step="${f.step}"` : '';
+    input = `<input type="${f.type}" name="${f.name}" class="form-input"${stepAttr}${ph}${reqAttr}${readAttr}${idAttr}${onchAttr}/>`;
+  }
+
+  return `<div><label class="form-label">${escHtml(f.label)}${f.required ? ' <span class="text-red-400">*</span>' : ''}</label>${input}</div>`;
+}
+
+// Auto-calc helpers
+function calcSaleTotal() {
+  const qty = parseFloat(document.querySelector('[name="quantity_kg"]')?.value) || 0;
+  const ppu = parseFloat(document.querySelector('[name="price_per_kg"]')?.value) || 0;
+  const el  = document.getElementById('sale-total');
+  if (el) el.value = (qty * ppu).toFixed(3);
+}
+function calcPurchaseTotal() {
+  const qty = parseFloat(document.querySelector('[name="qty"]')?.value) || 0;
+  const ppu = parseFloat(document.querySelector('[name="unit_price"]')?.value) || 0;
+  const el  = document.getElementById('purchase-total');
+  if (el) el.value = (qty * ppu).toFixed(3);
+}
+function calcProductionRevenue() {
+  const kg  = parseFloat(document.querySelector('[name="harvest_kg"]')?.value) || 0;
+  const ppk = parseFloat(document.querySelector('[name="price_per_kg"]')?.value) || 0;
+  const el  = document.getElementById('production-revenue');
+  if (el) el.value = (kg * ppk).toFixed(3);
+}
+function calcConstructionTotal() {
+  const qty  = parseFloat(document.querySelector('[name="qty"]')?.value)  || 0;
+  const cost = parseFloat(document.querySelector('[name="cost"]')?.value) || 0;
+  const el   = document.getElementById('construction-total');
+  if (el) el.value = (qty * cost).toFixed(3);
+}
+
+// ════════════════════ SUBMIT FORM ════════════════════
+async function submitForm(e) {
+  e.preventDefault();
+  const def = FORMS[state.currentForm];
+  if (!def) return;
+
+  const form  = document.getElementById('main-form');
+  const fdata = new FormData(form);
+  const data  = {};
+  fdata.forEach((v, k) => { data[k] = v.trim(); });
+
+  const btn   = document.getElementById('submit-btn');
+  const label = document.getElementById('submit-label');
+  const errEl = document.getElementById('form-error');
+  errEl.classList.add('hidden');
+  btn.disabled = true;
+  label.innerHTML = '<span class="spinner"></span> جاري الحفظ...';
+
+  try {
+    const r = await api(def.action, data);
+    const ok = r && (r.ok !== false) && (r.error === undefined || r.ok === true);
+    if (ok) {
+      toast('✅ تم الحفظ بنجاح');
+      form.reset();
+      // Re-set date
+      const dateEl = form.querySelector('input[name="date"]');
+      if (dateEl) dateEl.value = todayISO();
+      if (state.currentForm === 'payroll') {
+        const wnEl = form.querySelector('input[name="worker_name"]');
+        if (wnEl) wnEl.value = state.workerName;
+      }
+      // Refresh home data in background
+      loadTodayStats();
+    } else {
+      errEl.textContent = r.error || r.message || 'حدث خطأ أثناء الحفظ';
+      errEl.classList.remove('hidden');
+    }
+  } catch (ex) {
+    errEl.textContent = 'خطأ في الاتصال: ' + ex.message;
+    errEl.classList.remove('hidden');
+  }
+
+  btn.disabled = false;
+  label.textContent = 'حفظ — ' + def.title;
+}
+
+// ════════════════════ NAVIGATION ════════════════════
+function goHome() {
+  showScreen('home');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('nav-home')?.classList.add('active');
+  loadTodayStats();
+  const sel = document.getElementById('recent-sheet-select');
+  loadRecent(sel ? sel.value : 'SALES');
+}
+
+// ════════════════════ UTILS ════════════════════
+function todayISO() {
+  return new Date().toISOString().split('T')[0];
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

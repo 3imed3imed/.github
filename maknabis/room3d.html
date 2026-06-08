@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MAKNABIS — غرفة الزراعة ثلاثية الأبعاد</title>
+<script src="config.js"></script>
+<script type="importmap">{"imports":{"three":"https://esm.sh/three@0.160.0","three/addons/":"https://esm.sh/three@0.160.0/examples/jsm/"}}</script>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Tajawal', sans-serif; }
+body { background: #0f172a; color: white; overflow: hidden; height: 100vh; }
+#canvas-container { position: fixed; inset: 0; }
+canvas { display: block; }
+
+/* UI Overlays */
+.topbar { position: fixed; top: 0; left: 0; right: 0; background: rgba(15,23,42,0.85); backdrop-filter: blur(8px); padding: 0.6rem 1rem; display: flex; align-items: center; justify-content: space-between; z-index: 50; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.topbar-left { display: flex; align-items: center; gap: 0.6rem; }
+.topbar-right { display: flex; align-items: center; gap: 0.5rem; }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+.badge-cyan { background: rgba(6,182,212,0.2); color: #67e8f9; border: 1px solid rgba(6,182,212,0.3); }
+.badge-green { background: rgba(34,197,94,0.2); color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
+.badge-amber { background: rgba(245,158,11,0.2); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3); }
+.icon-btn { background: rgba(255,255,255,0.1); border: none; color: white; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 0.9rem; transition: background 0.15s; }
+.icon-btn:hover { background: rgba(255,255,255,0.2); }
+
+.side-panel { position: fixed; top: 58px; width: 200px; background: rgba(15,23,42,0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 0.75rem; z-index: 40; }
+.left-panel { right: 10px; }
+.right-panel { left: 10px; }
+.panel-title { font-size: 0.75rem; font-weight: 700; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+.panel-btn { display: flex; align-items: center; gap: 6px; width: 100%; background: rgba(255,255,255,0.07); border: none; color: white; border-radius: 8px; padding: 0.4rem 0.6rem; margin-bottom: 4px; cursor: pointer; font-family: Tajawal; font-size: 0.82rem; transition: background 0.15s; }
+.panel-btn:hover, .panel-btn.active { background: rgba(34,197,94,0.2); }
+.panel-btn.active { border: 1px solid rgba(34,197,94,0.4); }
+
+.reading-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.07); font-size: 0.8rem; }
+.reading-val.ok { color: #86efac; }
+.reading-val.warn { color: #fcd34d; }
+.reading-val.crit { color: #fca5a5; }
+.alert-mini { display: flex; gap: 4px; padding: 4px; background: rgba(245,158,11,0.1); border-radius: 6px; margin-bottom: 3px; font-size: 0.75rem; color: #fcd34d; }
+
+.bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(15,23,42,0.9); backdrop-filter: blur(8px); border-top: 1px solid rgba(255,255,255,0.1); padding: 0.5rem 1rem; display: flex; align-items: center; gap: 1rem; z-index: 50; overflow-x: auto; }
+.kpi-mini { text-align: center; flex-shrink: 0; }
+.kpi-mini-val { font-size: 1rem; font-weight: 800; color: #86efac; }
+.kpi-mini-lbl { font-size: 0.68rem; color: rgba(255,255,255,0.5); }
+
+.bag-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(15,23,42,0.95); border: 1px solid rgba(34,197,94,0.3); border-radius: 16px; padding: 1.5rem; z-index: 100; width: 260px; }
+.bag-modal.open { display: block; }
+.modal-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.85rem; border-bottom: 1px solid rgba(255,255,255,0.07); }
+.modal-label { color: rgba(255,255,255,0.5); }
+
+.connect-screen { position: fixed; inset: 0; background: #0f172a; display: flex; align-items: center; justify-content: center; z-index: 200; }
+.connect-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 2.5rem; width: 90%; max-width: 400px; text-align: center; }
+.c-inp { width: 100%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 0.65rem 0.9rem; color: white; font-family: Tajawal; font-size: 0.9rem; outline: none; margin-bottom: 0.75rem; }
+.c-inp::placeholder { color: rgba(255,255,255,0.3); }
+.c-btn { background: #16a34a; color: white; border: none; border-radius: 10px; padding: 0.7rem 1.5rem; font-family: Tajawal; font-weight: 700; cursor: pointer; width: 100%; font-size: 0.95rem; margin-bottom: 0.5rem; }
+.c-btn-demo { background: rgba(255,255,255,0.1); color: white; border: none; border-radius: 10px; padding: 0.7rem 1.5rem; font-family: Tajawal; cursor: pointer; width: 100%; font-size: 0.9rem; }
+
+.settings-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 150; align-items: center; justify-content: center; }
+.settings-modal.open { display: flex; }
+.settings-box { background: #1e293b; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 1.5rem; width: 90%; max-width: 380px; }
+
+@media (max-width: 768px) {
+  .side-panel { width: 160px; }
+  .left-panel { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- Connect Screen -->
+<div id="connect-screen" class="connect-screen">
+  <div class="connect-card">
+    <div style="font-size:3rem; margin-bottom:0.5rem;">🍄</div>
+    <h1 style="font-size:1.7rem; font-weight:800; margin-bottom:0.4rem;">MAKNABIS</h1>
+    <p style="color:rgba(255,255,255,0.5); font-size:0.85rem; margin-bottom:1.5rem;">غرفة الزراعة ثلاثية الأبعاد</p>
+    <input id="c-url" class="c-inp" placeholder="رابط Apps Script /exec">
+    <input id="c-key" class="c-inp" placeholder="مفتاح لوحة القيادة (FARM2026)">
+    <button class="c-btn" onclick="connectRoom()">اتصال ←</button>
+    <button class="c-btn-demo" onclick="demoMode()">🎮 عرض تجريبي</button>
+  </div>
+</div>
+
+<!-- Canvas Container -->
+<div id="canvas-container"></div>
+
+<!-- Topbar -->
+<div class="topbar" id="topbar" style="display:none;">
+  <div class="topbar-left">
+    <span style="font-size:1.2rem;">🍄</span>
+    <span style="font-weight:800; font-size:1rem;">MAKNABIS</span>
+    <span id="cycle-badge" class="badge badge-cyan"></span>
+    <span id="stage-badge" class="badge badge-green"></span>
+    <span id="day-badge" class="badge badge-amber"></span>
+  </div>
+  <div class="topbar-right">
+    <span id="status-dot" style="width:8px; height:8px; border-radius:50%; background:#22c55e; display:inline-block;"></span>
+    <button class="icon-btn" onclick="fetchRoomData()">↻</button>
+    <button class="icon-btn" onclick="document.getElementById('settings-modal').classList.add('open')">⚙️</button>
+  </div>
+</div>
+
+<!-- Left Panel (Controls) -->
+<div class="side-panel left-panel" id="left-panel" style="display:none;">
+  <div class="panel-title">المرحلة</div>
+  <button class="panel-btn" id="stg-spawn_run" onclick="setStage('spawn_run')">🌱 انتشار</button>
+  <button class="panel-btn" id="stg-case_run" onclick="setStage('case_run')">🌿 نمو</button>
+  <button class="panel-btn" id="stg-pinning" onclick="setStage('pinning')">🔵 إثمار</button>
+  <button class="panel-btn" id="stg-harvest" onclick="setStage('harvest')">🍄 حصاد</button>
+  <div class="panel-title" style="margin-top:0.75rem;">الطبقة</div>
+  <button class="panel-btn active" id="tier-all" onclick="filterTier(-1)">كل الطبقات</button>
+  <button class="panel-btn" id="tier-1" onclick="filterTier(0)">الطبقة 1</button>
+  <button class="panel-btn" id="tier-2" onclick="filterTier(1)">الطبقة 2</button>
+  <button class="panel-btn" id="tier-3" onclick="filterTier(2)">الطبقة 3</button>
+  <button class="panel-btn" id="tier-4" onclick="filterTier(3)">الطبقة 4</button>
+  <div class="panel-title" style="margin-top:0.75rem;">الكاميرا</div>
+  <button class="panel-btn" onclick="setCamView('iso')">📐 قياسي</button>
+  <button class="panel-btn" onclick="setCamView('front')">⬛ أمامي</button>
+  <button class="panel-btn" onclick="setCamView('top')">⬜ علوي</button>
+</div>
+
+<!-- Right Panel (Data) -->
+<div class="side-panel right-panel" id="right-panel" style="display:none;">
+  <div class="panel-title">📊 آخر قراءة</div>
+  <div id="reading-panel"><div style="color:rgba(255,255,255,0.3); font-size:0.8rem; text-align:center; padding:0.5rem;">لا توجد بيانات</div></div>
+  <div class="panel-title" style="margin-top:0.75rem;">🚨 تنبيهات</div>
+  <div id="alerts-panel"><div style="color:rgba(255,255,255,0.3); font-size:0.8rem; text-align:center; padding:0.4rem;">—</div></div>
+</div>
+
+<!-- Bottom Bar -->
+<div class="bottom-bar" id="bottom-bar" style="display:none;">
+  <div class="kpi-mini"><div class="kpi-mini-val" id="b-day">—</div><div class="kpi-mini-lbl">اليوم</div></div>
+  <div style="width:1px; height:30px; background:rgba(255,255,255,0.1);"></div>
+  <div class="kpi-mini"><div class="kpi-mini-val" id="b-bags">—</div><div class="kpi-mini-lbl">الأكياس</div></div>
+  <div style="width:1px; height:30px; background:rgba(255,255,255,0.1);"></div>
+  <div class="kpi-mini"><div class="kpi-mini-val" id="b-harvest">—</div><div class="kpi-mini-lbl">حصاد اليوم كغ</div></div>
+  <div style="width:1px; height:30px; background:rgba(255,255,255,0.1);"></div>
+  <div class="kpi-mini"><div class="kpi-mini-val" id="b-temp" style="color:#fcd34d;">—</div><div class="kpi-mini-lbl">درجة الحرارة</div></div>
+  <div style="width:1px; height:30px; background:rgba(255,255,255,0.1);"></div>
+  <div class="kpi-mini"><div class="kpi-mini-val" id="b-hum" style="color:#67e8f9;">—</div><div class="kpi-mini-lbl">الرطوبة %</div></div>
+  <div style="width:1px; height:30px; background:rgba(255,255,255,0.1);"></div>
+  <div class="kpi-mini"><div class="kpi-mini-val" id="b-co2" style="color:#c4b5fd;">—</div><div class="kpi-mini-lbl">CO₂ ppm</div></div>
+  <div style="width:1px; height:30px; background:rgba(255,255,255,0.1);"></div>
+  <div class="kpi-mini"><div class="kpi-mini-val" id="b-selected" style="color:#fca5a5;">—</div><div class="kpi-mini-lbl">الكيس المحدد</div></div>
+</div>
+
+<!-- Bag Detail Modal -->
+<div id="bag-modal" class="bag-modal">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+    <span style="font-weight:700; font-size:1rem;">🧺 تفاصيل الكيس</span>
+    <button onclick="document.getElementById('bag-modal').classList.remove('open')" style="background:none; border:none; color:white; cursor:pointer; font-size:1.2rem;">✕</button>
+  </div>
+  <div id="bag-details"></div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="settings-modal">
+  <div class="settings-box">
+    <h3 style="margin-bottom:1rem; font-weight:700;">⚙️ إعدادات</h3>
+    <div style="margin-bottom:0.75rem;">
+      <label style="font-size:0.85rem; color:rgba(255,255,255,0.6);">رابط API</label>
+      <input id="s-url" class="c-inp" style="margin-top:4px;" placeholder="https://script.google.com/.../exec">
+    </div>
+    <div style="margin-bottom:1rem;">
+      <label style="font-size:0.85rem; color:rgba(255,255,255,0.6);">مفتاح لوحة القيادة</label>
+      <input id="s-key" class="c-inp" style="margin-top:4px;" placeholder="FARM2026">
+    </div>
+    <div style="display:flex; gap:0.5rem;">
+      <button onclick="saveSettings()" style="background:#16a34a; color:white; border:none; border-radius:8px; padding:0.6rem 1.2rem; cursor:pointer; font-family:Tajawal; font-weight:700;">حفظ</button>
+      <button onclick="document.getElementById('settings-modal').classList.remove('open')" style="background:rgba(255,255,255,0.1); color:white; border:none; border-radius:8px; padding:0.6rem 1.2rem; cursor:pointer; font-family:Tajawal;">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const INFO = { room: { l: 6, w: 3, h: 3 }, shelves: { tiers: 4, depth: 0.5, count: 3, gapFromWall: 0.3 } };
+const STAGE_COLORS = { setup: 0xaaaaaa, spawn_run: 0xFFD700, casing: 0x8B4513, case_run: 0x90EE90, pinning: 0x4169E1, waiting: 0x9370DB, harvest: 0xFF6347, between: 0x808080, emergency: 0xFF3030 };
+const STAGES_AR = { setup:'استلام الأكياس', spawn_run:'انتشار الميسيليوم', casing:'التغطية', case_run:'نمو الميسيليوم', pinning:'تحفيز الإثمار', waiting:'انتظار الرؤوس', harvest:'الحصاد', between:'بين الموجات', emergency:'طوارئ' };
+
+const state = {
+  apiUrl: localStorage.getItem('room3d_url') || '',
+  key: localStorage.getItem('room3d_key') || 'FARM2026',
+  cycle: null, dayNumber: 0, stageId: 'spawn_run',
+  bagCount: 60, latestReading: null, targets: null,
+  alerts: [], harvestToday: 0, layerFilter: -1,
+  bagMeshes: [], selectedBag: null, demoMode: false,
+  refreshTimer: null
+};
+
+// Auto-fill from config.js
+if (window.FARM_CONFIG && window.FARM_CONFIG.GROWING_URL && window.FARM_CONFIG.GROWING_URL !== 'PASTE_YOUR_GROWING_EXEC_URL_HERE') {
+  if (!state.apiUrl) state.apiUrl = window.FARM_CONFIG.GROWING_URL;
+  if (!state.key) state.key = window.FARM_CONFIG.DASHBOARD_KEY || 'FARM2026';
+}
+
+// Three.js setup
+const container = document.getElementById('canvas-container');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(0x0f172a);
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x0f172a, 10, 25);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(6, 4, 7);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.maxPolarAngle = Math.PI * 0.85;
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(5, 8, 5);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(2048, 2048);
+scene.add(dirLight);
+scene.add(new THREE.PointLight(0x22c55e, 0.5, 10));
+
+function buildScene() {
+  // Dispose old objects
+  while (scene.children.length > 0) {
+    const obj = scene.children[0];
+    scene.remove(obj);
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material) { [].concat(obj.material).forEach(m => m.dispose()); }
+  }
+  state.bagMeshes = [];
+
+  // Re-add lights
+  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+  const dl = new THREE.DirectionalLight(0xffffff, 0.8);
+  dl.position.set(5, 8, 5); dl.castShadow = true;
+  dl.shadow.mapSize.set(2048, 2048);
+  scene.add(dl);
+  const pl = new THREE.PointLight(0x22c55e, 0.4, 12);
+  pl.position.set(0, 2.5, 0);
+  scene.add(pl);
+
+  const { l, w, h } = INFO.room;
+
+  // Floor
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(l, w), new THREE.MeshLambertMaterial({ color: 0x4a3728 }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // Walls
+  const wallMat = new THREE.MeshLambertMaterial({ color: 0xdde5dd, side: THREE.BackSide });
+  const room = new THREE.Mesh(new THREE.BoxGeometry(l, h, w), wallMat);
+  room.position.y = h / 2;
+  scene.add(room);
+
+  // Grid
+  const grid = new THREE.GridHelper(Math.max(l, w), 12, 0x2a4a2a, 0x1a3a1a);
+  scene.add(grid);
+
+  // Shelves and bags
+  const { tiers, depth, count, gapFromWall } = INFO.shelves;
+  const shelfW = 1.8;
+  const shelfPositionsZ = [-w/2 + gapFromWall + depth/2, 0, w/2 - gapFromWall - depth/2];
+  const tierHeights = [0.5, 1.0, 1.5, 2.0];
+  const shelfMat = new THREE.MeshLambertMaterial({ color: 0x8B5E3C });
+
+  let bagsPlaced = 0;
+  const totalBags = state.bagCount;
+
+  shelfPositionsZ.forEach((posZ, si) => {
+    tierHeights.forEach((ty, ti) => {
+      // Shelf plank
+      const shelf = new THREE.Mesh(new THREE.BoxGeometry(shelfW, 0.04, depth), shelfMat.clone());
+      shelf.position.set(0, ty, posZ - l/2 + l/2);
+      shelf.position.x = 0;
+      shelf.receiveShadow = true;
+      scene.add(shelf);
+
+      // Support posts
+      [-shelfW/2 + 0.05, shelfW/2 - 0.05].forEach(px => {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.04, ty, 0.04), shelfMat.clone());
+        post.position.set(px, ty / 2, shelf.position.z);
+        scene.add(post);
+      });
+
+      // Bags on this shelf
+      if (bagsPlaced >= totalBags) return;
+      if (state.layerFilter !== -1 && state.layerFilter !== ti) return;
+
+      const bagsPerShelf = Math.ceil((totalBags - bagsPlaced) / ((count - si) * (tiers - ti)));
+      const cols = Math.min(bagsPerShelf, 5);
+      const bagColor = STAGE_COLORS[state.stageId] || 0xFFD700;
+
+      for (let b = 0; b < cols && bagsPlaced < totalBags; b++) {
+        const bx = (b - (cols - 1) / 2) * 0.35;
+        const bagGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.22, 8);
+        const bagMat = new THREE.MeshLambertMaterial({ color: bagColor });
+        const bag = new THREE.Mesh(bagGeo, bagMat);
+        bag.position.set(bx, ty + 0.14, shelf.position.z);
+        bag.castShadow = true;
+        bag.userData = { bagIndex: bagsPlaced + 1, row: si + 1, tier: ti + 1, stage: state.stageId, cycleId: state.cycle ? state.cycle.id : '—' };
+        scene.add(bag);
+        state.bagMeshes.push(bag);
+        bagsPlaced++;
+      }
+    });
+  });
+}
+
+function updateUI() {
+  document.getElementById('cycle-badge').textContent = state.cycle ? state.cycle.id : (state.demoMode ? 'DEMO' : '—');
+  document.getElementById('stage-badge').textContent = STAGES_AR[state.stageId] || state.stageId;
+  document.getElementById('day-badge').textContent = 'يوم ' + state.dayNumber;
+
+  document.getElementById('b-day').textContent = state.dayNumber || '—';
+  document.getElementById('b-bags').textContent = state.bagCount;
+  document.getElementById('b-harvest').textContent = state.harvestToday != null ? state.harvestToday : '—';
+
+  // Reading panel
+  const rp = document.getElementById('reading-panel');
+  const lr = state.latestReading;
+  if (lr && (lr.morning || lr.noon || lr.evening)) {
+    const reading = lr.morning || lr.noon || lr.evening;
+    const t = state.targets || {};
+    const vClass = (v, range) => !range ? 'ok' : (v < range[0] || v > range[1]) ? 'crit' : 'ok';
+    rp.innerHTML = [
+      ['حرارة الهواء', reading.air_temp, '°C', t.air_temp],
+      ['الرطوبة', reading.humidity, '%', t.humidity],
+      ['CO₂', reading.co2, 'ppm', t.co2],
+      ['ك. الكمبوست', reading.compost_temp, '°C', null]
+    ].filter(([,v]) => v != null).map(([lbl, val, unit, range]) =>
+      `<div class="reading-item"><span style="color:rgba(255,255,255,0.6);">${lbl}</span><span class="reading-val ${vClass(val, range)}">${val}${unit}</span></div>`
+    ).join('');
+
+    document.getElementById('b-temp').textContent = (reading.air_temp != null ? reading.air_temp + '°C' : '—');
+    document.getElementById('b-hum').textContent = (reading.humidity != null ? reading.humidity + '%' : '—');
+    document.getElementById('b-co2').textContent = (reading.co2 != null ? reading.co2 : '—');
+  }
+
+  // Alerts panel
+  const ap = document.getElementById('alerts-panel');
+  if (state.alerts && state.alerts.length) {
+    ap.innerHTML = state.alerts.slice(0, 5).map(a =>
+      `<div class="alert-mini">⚠️ <span>${a.field || ''}: ${a.value || ''}</span></div>`
+    ).join('');
+  }
+}
+
+function setStage(s) {
+  state.stageId = s;
+  document.querySelectorAll('[id^="stg-"]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('stg-' + s);
+  if (btn) btn.classList.add('active');
+  buildScene();
+}
+
+function filterTier(t) {
+  window._filterTier(t);
+}
+window._filterTier = function(t) {
+  state.layerFilter = t;
+  document.querySelectorAll('[id^="tier-"]').forEach(b => b.classList.remove('active'));
+  const id = t === -1 ? 'tier-all' : 'tier-' + (t + 1);
+  const btn = document.getElementById(id);
+  if (btn) btn.classList.add('active');
+  buildScene();
+};
+
+function setCamView(v) {
+  window._setCamView(v);
+}
+window._setCamView = function(v) {
+  const views = { iso: [6, 4, 7], front: [0, 1.5, 8], top: [0, 9, 0] };
+  const pos = views[v] || views.iso;
+  camera.position.set(...pos);
+  controls.target.set(0, 1.5, 0);
+  controls.update();
+};
+
+// Raycasting for bag clicks
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+renderer.domElement.addEventListener('click', (e) => {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(state.bagMeshes);
+  if (intersects.length > 0) {
+    const bag = intersects[0].object;
+    const d = bag.userData;
+    document.getElementById('bag-details').innerHTML = `
+      <div class="modal-row"><span class="modal-label">رقم الكيس</span><span>#${d.bagIndex}</span></div>
+      <div class="modal-row"><span class="modal-label">الصف</span><span>${d.row}</span></div>
+      <div class="modal-row"><span class="modal-label">الطبقة</span><span>${d.tier}</span></div>
+      <div class="modal-row"><span class="modal-label">المرحلة</span><span>${STAGES_AR[d.stage] || d.stage}</span></div>
+      <div class="modal-row"><span class="modal-label">الدورة</span><span>${d.cycleId}</span></div>
+    `;
+    document.getElementById('bag-modal').classList.add('open');
+    document.getElementById('b-selected').textContent = '#' + d.bagIndex;
+  }
+});
+
+async function fetchRoomData() {
+  if (!state.apiUrl) return;
+  try {
+    const resp = await fetch(state.apiUrl + '?mode=room&key=' + encodeURIComponent(state.key));
+    const data = await resp.json();
+    if (data.ok) {
+      state.cycle = data.cycle;
+      state.dayNumber = data.day_number || 0;
+      state.stageId = data.stage_id || 'spawn_run';
+      state.bagCount = data.bag_count || (data.cycle && data.cycle.bag_count) || 60;
+      state.latestReading = data.latest_reading;
+      state.targets = data.targets;
+      state.alerts = data.alerts || [];
+      state.harvestToday = data.harvest_today;
+      buildScene();
+      updateUI();
+    }
+  } catch(e) { console.error('Room data fetch error:', e); }
+}
+
+function demoMode() {
+  state.demoMode = true;
+  state.cycle = { id: 'B-2026-DEMO', name: 'تجريبي', bag_count: 80 };
+  state.dayNumber = 24; state.stageId = 'case_run'; state.bagCount = 80;
+  state.latestReading = { morning: { air_temp: 23.4, compost_temp: 24.6, humidity: 91, co2: 6200 } };
+  state.targets = { air_temp: [23, 24], humidity: [90, 95], co2: [5000, 7500] };
+  state.harvestToday = 0; state.alerts = [];
+  startScene();
+}
+
+function connectRoom() {
+  const url = document.getElementById('c-url').value.trim();
+  const key = document.getElementById('c-key').value.trim() || 'FARM2026';
+  if (!url) { alert('أدخل رابط API'); return; }
+  state.apiUrl = url; state.key = key;
+  localStorage.setItem('room3d_url', url);
+  localStorage.setItem('room3d_key', key);
+  startScene();
+  fetchRoomData();
+}
+
+function startScene() {
+  document.getElementById('connect-screen').style.display = 'none';
+  document.getElementById('topbar').style.display = 'flex';
+  document.getElementById('left-panel').style.display = 'block';
+  document.getElementById('right-panel').style.display = 'block';
+  document.getElementById('bottom-bar').style.display = 'flex';
+  buildScene();
+  updateUI();
+}
+
+function saveSettings() {
+  state.apiUrl = document.getElementById('s-url').value.trim();
+  state.key = document.getElementById('s-key').value.trim() || 'FARM2026';
+  localStorage.setItem('room3d_url', state.apiUrl);
+  localStorage.setItem('room3d_key', state.key);
+  document.getElementById('settings-modal').classList.remove('open');
+  fetchRoomData();
+}
+
+document.getElementById('s-url').value = state.apiUrl;
+document.getElementById('s-key').value = state.key;
+
+window.connectRoom = connectRoom;
+window.demoMode = demoMode;
+window.setStage = setStage;
+window.filterTier = (t) => window._filterTier(t);
+window.setCamView = (v) => window._setCamView(v);
+window.saveSettings = saveSettings;
+window.fetchRoomData = fetchRoomData;
+
+// Animation loop
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Auto-connect
+if (state.apiUrl) {
+  startScene();
+  fetchRoomData();
+  state.refreshTimer = setInterval(fetchRoomData, 60000);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MAKNABIS — المساعد الذكي</title>
+<script src="config.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+* { font-family: 'Tajawal', sans-serif; box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #f0fdf4; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+.topbar { background: #14532d; color: white; padding: 0.75rem 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.topbar-left { display: flex; align-items: center; gap: 0.6rem; }
+.topbar-right { display: flex; align-items: center; gap: 0.5rem; }
+.icon-btn { background: rgba(255,255,255,0.15); border: none; color: white; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 0.95rem; }
+.messages-area { flex: 1; overflow-y: auto; padding: 1rem 1rem 0.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.msg-wrap { display: flex; flex-direction: column; max-width: 80%; }
+.msg-wrap.user { align-self: flex-start; }
+.msg-wrap.model { align-self: flex-end; }
+.bubble { padding: 0.7rem 1rem; border-radius: 16px; font-size: 0.9rem; line-height: 1.6; }
+.bubble.user { background: #16a34a; color: white; border-bottom-right-radius: 4px; }
+.bubble.model { background: white; color: #1f2937; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.msg-meta { font-size: 0.72rem; color: #9ca3af; margin-top: 3px; }
+.msg-wrap.user .msg-meta { text-align: right; }
+.context-pill { display: inline-flex; gap: 4px; background: #e0f2fe; color: #0369a1; border-radius: 20px; padding: 2px 8px; font-size: 0.72rem; margin-top: 4px; }
+.sources { margin-top: 0.4rem; }
+.sources a { display: inline-block; background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; border-radius: 6px; padding: 2px 8px; font-size: 0.75rem; text-decoration: none; margin-left: 4px; }
+.typing-indicator { display: flex; align-items: center; gap: 4px; padding: 0.6rem 0.9rem; background: white; border-radius: 16px; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); align-self: flex-end; }
+.typing-indicator span { width: 7px; height: 7px; background: #9ca3af; border-radius: 50%; animation: bounce 1.2s infinite; }
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+.quick-actions { padding: 0 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
+.chip { background: white; border: 1.5px solid #bbf7d0; color: #15803d; border-radius: 20px; padding: 0.4rem 0.9rem; font-size: 0.82rem; cursor: pointer; transition: all 0.15s; font-family: Tajawal; }
+.chip:hover { background: #dcfce7; }
+.input-bar { background: white; border-top: 1px solid #e5e7eb; padding: 0.75rem 1rem; display: flex; align-items: flex-end; gap: 0.5rem; flex-shrink: 0; }
+.input-bar textarea { flex: 1; border: 1.5px solid #d1d5db; border-radius: 12px; padding: 0.6rem 0.9rem; font-family: Tajawal; font-size: 0.9rem; resize: none; outline: none; max-height: 100px; line-height: 1.5; }
+.input-bar textarea:focus { border-color: #16a34a; }
+.send-btn { background: #16a34a; color: white; border: none; border-radius: 12px; padding: 0.6rem 1rem; cursor: pointer; font-size: 1.1rem; flex-shrink: 0; height: 42px; }
+.send-btn:disabled { opacity: 0.5; cursor: default; }
+.connect-screen { flex: 1; display: flex; align-items: center; justify-content: center; }
+.connect-card { background: white; border-radius: 20px; padding: 2.5rem; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,0.1); }
+.inp { width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 0.65rem 0.9rem; font-family: Tajawal; font-size: 0.9rem; outline: none; }
+.inp:focus { border-color: #16a34a; }
+.btn-primary { background: #16a34a; color: white; border: none; border-radius: 8px; padding: 0.65rem 1.5rem; font-family: Tajawal; font-weight: 700; cursor: pointer; width: 100%; font-size: 1rem; }
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal-box { background: white; border-radius: 16px; padding: 1.5rem; width: 90%; max-width: 400px; }
+code { background: #f3f4f6; border-radius: 4px; padding: 1px 5px; font-size: 0.85em; }
+pre { background: #f3f4f6; border-radius: 8px; padding: 0.75rem; overflow-x: auto; font-size: 0.8rem; margin: 0.4rem 0; }
+table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0.5rem 0; }
+th, td { border: 1px solid #e5e7eb; padding: 4px 8px; text-align: right; }
+th { background: #f9fafb; font-weight: 700; }
+h2 { font-size: 1rem; font-weight: 700; margin: 0.4rem 0; }
+h3 { font-size: 0.95rem; font-weight: 700; margin: 0.3rem 0; }
+ul { padding-right: 1.2rem; }
+li { margin: 2px 0; }
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <span style="font-size:1.3rem;">🍄</span>
+    <span style="font-weight:800;">MAKNABIS</span>
+    <span style="opacity:0.7; font-size:0.85rem;">المساعد الذكي</span>
+  </div>
+  <div class="topbar-right">
+    <span id="ctx-pill" style="display:none;" class="context-pill"></span>
+    <button class="icon-btn" onclick="clearChat()" title="مسح المحادثة">🗑️</button>
+    <button class="icon-btn" onclick="document.getElementById('settings-modal').classList.add('open')">⚙️</button>
+  </div>
+</div>
+
+<!-- Connect Screen -->
+<div id="connect-screen" class="connect-screen">
+  <div class="connect-card">
+    <div style="font-size:3rem; margin-bottom:0.5rem;">🤖</div>
+    <h1 style="font-size:1.6rem; font-weight:800; color:#14532d; margin-bottom:0.4rem;">المساعد الذكي</h1>
+    <p style="color:#6b7280; font-size:0.85rem; margin-bottom:0.4rem;">مدعوم بـ Gemini 2.5 Flash</p>
+    <p style="color:#9ca3af; font-size:0.78rem; margin-bottom:1.5rem;">مجاني — 1500 سؤال/يوم</p>
+    <div style="text-align:right; margin-bottom:1rem;">
+      <label style="font-size:0.85rem; font-weight:600; color:#374151;">رابط AI Apps Script</label>
+      <input id="c-url" class="inp" style="margin-top:4px;" placeholder="https://script.google.com/.../exec">
+    </div>
+    <button class="btn-primary" onclick="connect()">اتصال →</button>
+    <p style="margin-top:1rem; font-size:0.78rem; color:#9ca3af;">اضغط ESC أو اختبر الاتصال أولاً</p>
+  </div>
+</div>
+
+<!-- Chat UI -->
+<div id="chat-ui" style="display:none; flex:1; display:none; flex-direction:column; overflow:hidden;">
+  <div id="messages" class="messages-area"></div>
+
+  <!-- Quick actions (shown when empty) -->
+  <div id="quick-actions" class="quick-actions" style="padding-bottom:0.75rem;">
+    <button class="chip" onclick="sendQuick('اعطيني ملخص قصير لحالة المزرعة اليوم')">📊 ملخص اليوم</button>
+    <button class="chip" onclick="sendQuick('حلّل التنبيهات الحالية وقللي شني الأولوية')">🩺 تحليل التنبيهات</button>
+    <button class="chip" onclick="sendQuick('شني أسعار الفطر الأبيض الحالية في تونس؟')">💰 أسعار السوق</button>
+    <button class="chip" onclick="sendQuick('حسب يوم الدورة والمرحلة، شني المهام الأهم اليوم؟')">📅 نصيحة اليوم</button>
+    <button class="chip" onclick="sendQuick('هل القراءة الحالية صحيحة للمرحلة؟ وشني اللازم نصلح؟')">🌡️ تحليل البيئة</button>
+    <button class="chip" onclick="sendQuick('وين أفضل أبيع وكيفاش نسعّر الكيلو؟')">🛒 استراتيجية البيع</button>
+  </div>
+
+  <div class="input-bar">
+    <textarea id="inp" rows="1" placeholder="اكتب سؤالك هنا..." oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
+    <button class="send-btn" id="send-btn" onclick="send()">➤</button>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="modal-overlay">
+  <div class="modal-box">
+    <h3 style="margin-bottom:1rem; font-weight:700;">⚙️ إعدادات المساعد</h3>
+    <div style="margin-bottom:0.75rem;">
+      <label style="font-size:0.85rem; font-weight:600;">رابط AI Apps Script</label>
+      <input id="s-url" class="inp" style="margin-top:4px;">
+    </div>
+    <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+      <button onclick="saveSettings()" style="background:#16a34a; color:white; border:none; border-radius:8px; padding:0.6rem 1.2rem; cursor:pointer; font-family:Tajawal; font-weight:700;">حفظ</button>
+      <button onclick="testConn()" style="background:#e5e7eb; border:none; border-radius:8px; padding:0.6rem 1.2rem; cursor:pointer; font-family:Tajawal;">🔍 اختبار</button>
+      <button onclick="clearChat(); document.getElementById('settings-modal').classList.remove('open')" style="background:#fee2e2; color:#991b1b; border:none; border-radius:8px; padding:0.6rem 1.2rem; cursor:pointer; font-family:Tajawal;">🗑️ مسح</button>
+      <button onclick="document.getElementById('settings-modal').classList.remove('open')" style="background:#e5e7eb; border:none; border-radius:8px; padding:0.6rem 1.2rem; cursor:pointer; font-family:Tajawal;">إغلاق</button>
+    </div>
+    <div id="test-res" style="margin-top:0.75rem; font-size:0.85rem;"></div>
+  </div>
+</div>
+
+<script>
+const state = {
+  apiUrl: localStorage.getItem('ai_chat_url') || '',
+  messages: [],
+  loading: false,
+  lastCtx: null
+};
+
+// Auto-fill from config.js
+if (window.FARM_CONFIG && window.FARM_CONFIG.AI_URL && window.FARM_CONFIG.AI_URL !== 'PASTE_YOUR_AI_EXEC_URL_HERE') {
+  if (!state.apiUrl) state.apiUrl = window.FARM_CONFIG.AI_URL;
+}
+
+function init() {
+  loadHistory();
+  if (state.apiUrl) {
+    showChat();
+  }
+  document.getElementById('s-url').value = state.apiUrl;
+}
+
+function connect() {
+  const url = document.getElementById('c-url').value.trim();
+  if (!url) { alert('أدخل رابط API'); return; }
+  state.apiUrl = url;
+  localStorage.setItem('ai_chat_url', url);
+  document.getElementById('s-url').value = url;
+  showChat();
+}
+
+function showChat() {
+  document.getElementById('connect-screen').style.display = 'none';
+  const chatUi = document.getElementById('chat-ui');
+  chatUi.style.display = 'flex';
+  chatUi.style.flexDirection = 'column';
+  renderMessages();
+}
+
+function loadHistory() {
+  try {
+    const saved = localStorage.getItem('ai_chat_history');
+    if (saved) state.messages = JSON.parse(saved).slice(-24);
+  } catch(e) { state.messages = []; }
+}
+
+function saveHistory() {
+  localStorage.setItem('ai_chat_history', JSON.stringify(state.messages.slice(-24)));
+}
+
+function clearChat() {
+  state.messages = [];
+  state.lastCtx = null;
+  saveHistory();
+  renderMessages();
+  document.getElementById('ctx-pill').style.display = 'none';
+}
+
+function renderMessages() {
+  const el = document.getElementById('messages');
+  const qa = document.getElementById('quick-actions');
+  el.innerHTML = '';
+  if (!state.messages.length) {
+    qa.style.display = 'flex';
+    return;
+  }
+  qa.style.display = 'none';
+  state.messages.forEach((m, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-wrap ' + (m.role === 'user' ? 'user' : 'model');
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble ' + (m.role === 'user' ? 'user' : 'model');
+    bubble.innerHTML = m.role === 'user' ? escHtml(m.content).replace(/\n/g,'<br>') : renderMarkdown(m.content);
+    wrap.appendChild(bubble);
+    if (m.sources && m.sources.length) {
+      const src = document.createElement('div');
+      src.className = 'sources';
+      src.innerHTML = m.sources.map(s => `<a href="${s.url || '#'}" target="_blank">🔗 ${escHtml(s.title || 'مصدر')}</a>`).join('');
+      wrap.appendChild(src);
+    }
+    if (m.context && (m.context.cycle_id || m.context.stage_id)) {
+      const pill = document.createElement('div');
+      pill.className = 'context-pill';
+      pill.textContent = [m.context.cycle_id, m.context.stage_id ? 'يوم '+m.context.day_number : ''].filter(Boolean).join(' · ');
+      wrap.appendChild(pill);
+    }
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+    meta.textContent = m.time || '';
+    wrap.appendChild(meta);
+    el.appendChild(wrap);
+  });
+  el.scrollTop = el.scrollHeight;
+}
+
+function showTyping() {
+  const el = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg-wrap model';
+  div.id = 'typing';
+  div.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function hideTyping() {
+  const t = document.getElementById('typing');
+  if (t) t.remove();
+}
+
+async function send() {
+  const inp = document.getElementById('inp');
+  const text = inp.value.trim();
+  if (!text || state.loading) return;
+  inp.value = '';
+  inp.style.height = '';
+  sendQuick(text);
+}
+
+async function sendQuick(text) {
+  if (state.loading) return;
+  state.loading = true;
+  document.getElementById('send-btn').disabled = true;
+  document.getElementById('quick-actions').style.display = 'none';
+
+  const time = new Date().toLocaleTimeString('ar-TN', {hour:'2-digit', minute:'2-digit'});
+  state.messages.push({ role: 'user', content: text, time });
+  renderMessages();
+  showTyping();
+
+  try {
+    const resp = await fetch(state.apiUrl, {
+      method: 'POST', redirect: 'follow',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ action: 'ask', messages: state.messages.slice(-24).map(m => ({ role: m.role, content: m.content })) })
+    });
+    const data = await resp.json();
+    hideTyping();
+    if (data.ok !== false) {
+      const reply = data.reply || data.text || JSON.stringify(data);
+      const ctx = data.context;
+      state.messages.push({ role: 'model', content: reply, time: new Date().toLocaleTimeString('ar-TN', {hour:'2-digit', minute:'2-digit'}), sources: data.sources || [], context: ctx });
+      if (ctx) {
+        const pill = document.getElementById('ctx-pill');
+        pill.style.display = 'inline-flex';
+        pill.textContent = [ctx.cycle_id, ctx.day_number ? 'يوم '+ctx.day_number : '', ctx.stage_id].filter(Boolean).join(' · ');
+      }
+    } else {
+      state.messages.push({ role: 'model', content: '❌ خطأ: ' + (data.error || 'فشل الاتصال'), time: new Date().toLocaleTimeString('ar-TN', {hour:'2-digit', minute:'2-digit'}) });
+    }
+    saveHistory();
+    renderMessages();
+  } catch(e) {
+    hideTyping();
+    state.messages.push({ role: 'model', content: '❌ فشل الاتصال — تحقق من رابط API', time: new Date().toLocaleTimeString('ar-TN', {hour:'2-digit', minute:'2-digit'}) });
+    renderMessages();
+  } finally {
+    state.loading = false;
+    document.getElementById('send-btn').disabled = false;
+  }
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+}
+
+function autoResize(el) {
+  el.style.height = '';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function saveSettings() {
+  state.apiUrl = document.getElementById('s-url').value.trim();
+  localStorage.setItem('ai_chat_url', state.apiUrl);
+  document.getElementById('settings-modal').classList.remove('open');
+  if (state.apiUrl) showChat();
+}
+
+async function testConn() {
+  const url = document.getElementById('s-url').value.trim();
+  const el = document.getElementById('test-res');
+  el.textContent = '⏳ جاري...';
+  try {
+    const resp = await fetch(url + '?ping=1');
+    const d = await resp.json();
+    el.innerHTML = d.ok ? '✅ متصل — ' + (d.model || 'Gemini') + (d.has_gemini_key ? ' (المفتاح موجود)' : ' ⚠️ المفتاح غير مضبوط') : '❌ ' + (d.error || 'خطأ');
+  } catch(e) { el.textContent = '❌ ' + e.message; }
+}
+
+function escHtml(t) { return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function renderMarkdown(text) {
+  let html = escHtml(text);
+  // Tables
+  html = html.replace(/((?:\|[^\n]+\|\n?){2,})/g, (match) => {
+    const rows = match.trim().split('\n').filter(r => r.trim());
+    let out = '<table>';
+    rows.forEach((r, i) => {
+      if (r.match(/^\|[\s\-:|]+\|/)) return;
+      const cells = r.split('|').filter((_,j) => j > 0 && _ !== undefined).slice(0, -1);
+      const tag = i === 0 ? 'th' : 'td';
+      out += '<tr>' + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('') + '</tr>';
+    });
+    return out + '</table>';
+  });
+  // Code blocks
+  html = html.replace(/```[\s\S]*?```/g, m => '<pre>' + m.slice(3, -3).replace(/^[^\n]*\n/, '') + '</pre>');
+  // Headers
+  html = html.replace(/^### (.*)/gm, '<h3>$1</h3>').replace(/^## (.*)/gm, '<h2>$1</h2>').replace(/^# (.*)/gm, '<h2>$1</h2>');
+  // Bold, italic, inline code
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>').replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Lists
+  html = html.replace(/^[•\-\*] (.*)/gm, '<li>$1</li>').replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+  // Line breaks
+  html = html.replace(/\n\n+/g, '<br><br>').replace(/\n/g, '<br>');
+  return html;
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('settings-modal').classList.remove('open'); if ((e.ctrlKey||e.metaKey) && e.key === 'k') { e.preventDefault(); clearChat(); } });
+
+init();
+</script>
+</body>
+</html>
