@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1a5c3a">
+<title>MAKNABIS — مركز التحكم</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { tajawal: ['Tajawal', 'sans-serif'] },
+        colors: {
+          farm: {
+            900: '#0d3320',
+            800: '#144d2e',
+            700: '#1a5c3a',
+            600: '#216e47',
+            500: '#2a8a59',
+            400: '#3aad72',
+            300: '#5ec98e',
+            200: '#9de3be',
+            100: '#d4f4e5',
+            50:  '#f0fbf5'
+          }
+        }
+      }
+    }
+  }
+</script>
+<style>
+  * { font-family: 'Tajawal', sans-serif; }
+  body { background: #f4f7f4; }
+
+  /* Topbar */
+  #topbar { background: #1a5c3a; }
+
+  /* Tab bar */
+  .tab-btn { transition: all .2s; }
+  .tab-btn.active { color: #1a5c3a; border-bottom: 3px solid #1a5c3a; background: #f0fbf5; }
+  .tab-btn:not(.active):hover { background: #e8f5ee; }
+
+  /* Cards */
+  .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+  .kpi-card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.07); padding: 1rem; }
+
+  /* Toast */
+  #toast-container { position: fixed; bottom: 1.5rem; left: 1.5rem; z-index: 9999; display: flex; flex-direction: column; gap: .5rem; }
+  .toast { padding: .75rem 1.25rem; border-radius: 10px; color: #fff; font-size: .9rem; font-weight: 500; max-width: 320px; box-shadow: 0 4px 12px rgba(0,0,0,.18); animation: slideIn .3s ease; }
+  .toast.success { background: #1a5c3a; }
+  .toast.error   { background: #c0392b; }
+  .toast.info    { background: #2471a3; }
+  @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  /* Spinner */
+  .spinner { display: inline-block; width: 22px; height: 22px; border: 3px solid #d4f4e5; border-top-color: #1a5c3a; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Table */
+  .data-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .data-table th { background: #f0fbf5; color: #1a5c3a; font-weight: 700; padding: .55rem .75rem; text-align: right; border-bottom: 2px solid #d4f4e5; white-space: nowrap; }
+  .data-table td { padding: .5rem .75rem; border-bottom: 1px solid #f0f0f0; text-align: right; }
+  .data-table tr:hover td { background: #f9fef9; }
+
+  /* Status badges */
+  .badge { display: inline-block; padding: .2rem .6rem; border-radius: 20px; font-size: .78rem; font-weight: 700; }
+  .badge-active    { background: #d4f4e5; color: #1a5c3a; }
+  .badge-planning  { background: #fef9e7; color: #b7950b; }
+  .badge-harvesting{ background: #e8f8f5; color: #1e8449; }
+  .badge-closed    { background: #f0f0f0; color: #777; }
+
+  /* Cycle cards */
+  .cycle-card { background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.07); padding:1rem; border-right:4px solid #1a5c3a; }
+  .cycle-card.planning  { border-right-color: #f0c30f; }
+  .cycle-card.harvesting{ border-right-color: #27ae60; }
+  .cycle-card.closed    { border-right-color: #bbb; }
+
+  /* Modal */
+  #modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; align-items: center; justify-content: center; }
+  #modal-backdrop.open { display: flex; }
+  #modal-box { background:#fff; border-radius:14px; width:90%; max-width:480px; padding:1.5rem; box-shadow:0 8px 30px rgba(0,0,0,.2); max-height:90vh; overflow-y:auto; }
+
+  /* Confirm modal */
+  #confirm-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1100; align-items: center; justify-content: center; }
+  #confirm-backdrop.open { display: flex; }
+  #confirm-box { background:#fff; border-radius:14px; width:90%; max-width:360px; padding:1.5rem; box-shadow:0 8px 30px rgba(0,0,0,.2); text-align:center; }
+
+  /* Input */
+  .form-input { width:100%; border:1.5px solid #d1d5db; border-radius:8px; padding:.55rem .85rem; font-family:'Tajawal',sans-serif; font-size:.95rem; direction:rtl; transition:border-color .2s; }
+  .form-input:focus { outline:none; border-color:#1a5c3a; }
+  .form-label { display:block; font-size:.88rem; font-weight:600; color:#374151; margin-bottom:.3rem; }
+
+  /* Alert items */
+  .alert-item { display:flex; align-items:flex-start; gap:.75rem; padding:.65rem 1rem; border-radius:8px; margin-bottom:.5rem; }
+  .alert-item.warn  { background:#fef9e7; border-right:3px solid #f0c30f; }
+  .alert-item.error { background:#fdf2f2; border-right:3px solid #e74c3c; }
+  .alert-item.info  { background:#ebf5fb; border-right:3px solid #2980b9; }
+
+  /* Iframes */
+  .iframe-container { width:100%; height:calc(100vh - 120px); border:0; }
+
+  /* Finance PNL colors */
+  .pnl-pos { color: #1a5c3a; font-weight:700; }
+  .pnl-neg { color: #c0392b; font-weight:700; }
+
+  /* Settings test indicator */
+  .test-dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:#ccc; margin-inline-start:6px; vertical-align:middle; }
+  .test-dot.ok  { background:#27ae60; }
+  .test-dot.err { background:#e74c3c; }
+
+  /* Scrollable table wrapper */
+  .table-wrap { overflow-x:auto; }
+
+  /* Hero card */
+  .hero-card { background: linear-gradient(135deg, #1a5c3a 0%, #2a8a59 100%); color:#fff; border-radius:16px; padding:1.5rem; }
+</style>
+<script src="config.js"></script>
+</head>
+<body class="min-h-screen">
+
+<!-- ══════════════ TOP BAR ══════════════ -->
+<div id="topbar" class="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-4 py-3 shadow-lg">
+  <div class="flex items-center gap-3">
+    <span class="text-2xl">🍄</span>
+    <div>
+      <div class="text-white font-bold text-lg leading-tight">MAKNABIS</div>
+      <div class="text-farm-200 text-xs">مركز التحكم — المالك</div>
+    </div>
+  </div>
+  <div class="flex items-center gap-2">
+    <button id="refresh-btn" onclick="refreshCurrentTab()" class="bg-farm-600 hover:bg-farm-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1">
+      <span>↻</span> تحديث
+    </button>
+    <div id="topbar-status" class="text-farm-200 text-xs hidden"></div>
+  </div>
+</div>
+
+<!-- ══════════════ TAB BAR ══════════════ -->
+<div id="tab-bar" class="fixed top-[58px] inset-x-0 z-40 bg-white border-b border-gray-200 flex overflow-x-auto shadow-sm">
+  <button class="tab-btn active flex-shrink-0 flex flex-col items-center px-3 py-2 text-xs font-medium text-gray-600 min-w-[70px]" data-tab="home" onclick="switchTab('home')">
+    <span class="text-lg">🏠</span><span>الرئيسية</span>
+  </button>
+  <button class="tab-btn flex-shrink-0 flex flex-col items-center px-3 py-2 text-xs font-medium text-gray-600 min-w-[70px]" data-tab="cycles" onclick="switchTab('cycles')">
+    <span class="text-lg">🔄</span><span>الدورات</span>
+  </button>
+  <button class="tab-btn flex-shrink-0 flex flex-col items-center px-3 py-2 text-xs font-medium text-gray-600 min-w-[70px]" data-tab="growing" onclick="switchTab('growing')">
+    <span class="text-lg">🌱</span><span>التشغيل</span>
+  </button>
+  <button class="tab-btn flex-shrink-0 flex flex-col items-center px-3 py-2 text-xs font-medium text-gray-600 min-w-[70px]" data-tab="finance" onclick="switchTab('finance')">
+    <span class="text-lg">💰</span><span>المالية</span>
+  </button>
+  <button class="tab-btn flex-shrink-0 flex flex-col items-center px-3 py-2 text-xs font-medium text-gray-600 min-w-[70px]" data-tab="room3d" onclick="switchTab('room3d')">
+    <span class="text-lg">🎬</span><span>الغرفة</span>
+  </button>
+  <button class="tab-btn flex-shrink-0 flex flex-col items-center px-3 py-2 text-xs font-medium text-gray-600 min-w-[70px]" data-tab="chat" onclick="switchTab('chat')">
+    <span class="text-lg">🤖</span><span>المساعد</span>
+  </button>
+  <button class="tab-btn flex-shrink-0 flex flex-col items-center px-3 py-2 text-xs font-medium text-gray-600 min-w-[70px]" data-tab="settings" onclick="switchTab('settings')">
+    <span class="text-lg">⚙️</span><span>الإعدادات</span>
+  </button>
+</div>
+
+<!-- ══════════════ CONNECT SCREEN ══════════════ -->
+<div id="connect-screen" class="hidden fixed inset-0 bg-farm-900 z-[200] flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
+    <div class="text-center mb-6">
+      <div class="text-5xl mb-2">🍄</div>
+      <h1 class="text-2xl font-bold text-farm-700">MAKNABIS</h1>
+      <p class="text-gray-500 text-sm mt-1">مركز تحكم المالك — الإعداد الأولي</p>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <label class="form-label">🌱 رابط Growing API</label>
+        <input id="conn-growing" type="url" class="form-input" placeholder="https://script.google.com/macros/s/.../exec">
+      </div>
+      <div>
+        <label class="form-label">💰 رابط Finance API</label>
+        <input id="conn-finance" type="url" class="form-input" placeholder="https://script.google.com/macros/s/.../exec">
+      </div>
+      <div>
+        <label class="form-label">🤖 رابط AI API</label>
+        <input id="conn-ai" type="url" class="form-input" placeholder="https://script.google.com/macros/s/.../exec">
+      </div>
+      <div>
+        <label class="form-label">🔑 مفتاح Dashboard</label>
+        <input id="conn-key" type="text" class="form-input" value="FARM2026">
+      </div>
+      <div>
+        <label class="form-label">🔒 كلمة سر المالية</label>
+        <input id="conn-fpw" type="password" class="form-input" value="FARM2026">
+      </div>
+      <button onclick="connectSave()" class="w-full bg-farm-700 hover:bg-farm-600 text-white py-3 rounded-xl font-bold text-lg mt-2">
+        دخول →
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ MAIN CONTENT ══════════════ -->
+<div id="main-content" class="pt-[120px] pb-6 px-3 max-w-5xl mx-auto">
+
+  <!-- ── HOME TAB ── -->
+  <div id="tab-home" class="tab-content">
+    <div id="home-loading" class="flex justify-center py-12 hidden"><div class="spinner"></div></div>
+
+    <!-- Hero card -->
+    <div class="hero-card mb-4">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <p class="text-farm-200 text-sm">الدورة النشطة</p>
+          <h2 id="home-cycle-name" class="text-2xl font-bold mt-0.5">—</h2>
+        </div>
+        <div class="text-right">
+          <p class="text-farm-200 text-sm">المرحلة</p>
+          <p id="home-stage" class="text-xl font-bold mt-0.5">—</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Growing KPIs -->
+    <h3 class="text-farm-700 font-bold text-sm mb-2 px-1">📊 الإنتاج</h3>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+      <div class="kpi-card text-center">
+        <p class="text-gray-400 text-xs mb-1">يوم الدورة</p>
+        <p id="kpi-day" class="text-3xl font-bold text-farm-700">—</p>
+      </div>
+      <div class="kpi-card text-center">
+        <p class="text-gray-400 text-xs mb-1">المرحلة</p>
+        <p id="kpi-stage" class="text-lg font-bold text-farm-600">—</p>
+      </div>
+      <div class="kpi-card text-center">
+        <p class="text-gray-400 text-xs mb-1">حصاد اليوم (كغ)</p>
+        <p id="kpi-harvest" class="text-3xl font-bold text-farm-700">—</p>
+      </div>
+      <div class="kpi-card text-center">
+        <p class="text-gray-400 text-xs mb-1">عدد الأكياس</p>
+        <p id="kpi-bags" class="text-3xl font-bold text-farm-700">—</p>
+      </div>
+    </div>
+
+    <!-- Finance KPIs -->
+    <h3 class="text-farm-700 font-bold text-sm mb-2 px-1">💰 مالية اليوم</h3>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+      <div class="kpi-card text-center">
+        <p class="text-gray-400 text-xs mb-1">مبيعات اليوم</p>
+        <p id="fin-kpi-sales" class="text-2xl font-bold text-farm-700">—</p>
+        <p class="text-gray-400 text-xs">د.ت</p>
+      </div>
+      <div class="kpi-card text-center">
+        <p class="text-gray-400 text-xs mb-1">مشتريات</p>
+        <p id="fin-kpi-purchases" class="text-2xl font-bold text-orange-500">—</p>
+        <p class="text-gray-400 text-xs">د.ت</p>
+      </div>
+      <div class="kpi-card text-center">
+        <p class="text-gray-400 text-xs mb-1">أجور</p>
+        <p id="fin-kpi-payroll" class="text-2xl font-bold text-orange-500">—</p>
+        <p class="text-gray-400 text-xs">د.ت</p>
+      </div>
+      <div class="kpi-card text-center">
+        <p class="text-gray-400 text-xs mb-1">مصاريف</p>
+        <p id="fin-kpi-expenses" class="text-2xl font-bold text-orange-500">—</p>
+        <p class="text-gray-400 text-xs">د.ت</p>
+      </div>
+    </div>
+
+    <!-- Alerts -->
+    <h3 class="text-farm-700 font-bold text-sm mb-2 px-1">🔔 التنبيهات</h3>
+    <div id="alerts-list" class="card p-4">
+      <p class="text-gray-400 text-sm text-center">جارٍ التحميل...</p>
+    </div>
+  </div>
+
+  <!-- ── CYCLES TAB ── -->
+  <div id="tab-cycles" class="tab-content hidden">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-farm-700 font-bold text-lg">دورات الإنتاج</h2>
+      <button onclick="openCycleModal()" class="bg-farm-700 hover:bg-farm-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1">
+        <span>+</span> إنشاء دورة
+      </button>
+    </div>
+    <div id="cycles-loading" class="flex justify-center py-12 hidden"><div class="spinner"></div></div>
+    <div id="cycles-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+  </div>
+
+  <!-- ── GROWING TAB ── -->
+  <div id="tab-growing" class="tab-content hidden">
+    <h2 class="text-farm-700 font-bold text-lg mb-4">بيانات التشغيل</h2>
+    <div class="card p-4 mb-4">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="form-label">نوع البيانات</label>
+          <select id="growing-sheet-filter" class="form-input" onchange="loadGrowingData()">
+            <option value="harvest">حصاد</option>
+            <option value="emergency">طوارئ</option>
+            <option value="spawn_run">Spawn Run</option>
+            <option value="case_run">Case Run</option>
+            <option value="room">الغرفة</option>
+            <option value="alerts">التنبيهات</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">تصفية بالدورة (اختياري)</label>
+          <select id="growing-cycle-filter" class="form-input" onchange="loadGrowingData()">
+            <option value="">— كل الدورات —</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div id="growing-loading" class="flex justify-center py-8 hidden"><div class="spinner"></div></div>
+    <div class="card">
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr id="growing-thead"><th>—</th></tr></thead>
+          <tbody id="growing-tbody"><tr><td class="text-center text-gray-400 py-6">اختر نوع البيانات أعلاه</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FINANCE TAB ── -->
+  <div id="tab-finance" class="tab-content hidden">
+    <h2 class="text-farm-700 font-bold text-lg mb-4">البيانات المالية</h2>
+
+    <!-- Cycle KPIs -->
+    <div id="fin-loading" class="flex justify-center py-8 hidden"><div class="spinner"></div></div>
+    <div id="fin-cycle-kpis" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4"></div>
+
+    <div class="card p-4 mb-4">
+      <div>
+        <label class="form-label">الجدول</label>
+        <select id="finance-sheet-filter" class="form-input" onchange="loadFinanceData()">
+          <option value="SALES">مبيعات</option>
+          <option value="PURCHASES">مشتريات</option>
+          <option value="PAYROLL">أجور</option>
+          <option value="OPERATING">تشغيل</option>
+          <option value="PRODUCTION">إنتاج</option>
+          <option value="CONSTRUCTION">إنشاء</option>
+          <option value="INVENTORY">مخزون</option>
+        </select>
+      </div>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr id="finance-thead"><th>—</th></tr></thead>
+          <tbody id="finance-tbody"><tr><td class="text-center text-gray-400 py-6">اختر جدولاً أعلاه</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ROOM3D TAB ── -->
+  <div id="tab-room3d" class="tab-content hidden">
+    <iframe id="room-iframe" src="about:blank" class="iframe-container" title="الغرفة ثلاثية الأبعاد"></iframe>
+  </div>
+
+  <!-- ── CHAT TAB ── -->
+  <div id="tab-chat" class="tab-content hidden">
+    <iframe id="chat-iframe" src="about:blank" class="iframe-container" title="المساعد الذكي"></iframe>
+  </div>
+
+  <!-- ── SETTINGS TAB ── -->
+  <div id="tab-settings" class="tab-content hidden">
+    <h2 class="text-farm-700 font-bold text-lg mb-4">الإعدادات</h2>
+    <div class="card p-5 mb-4">
+      <h3 class="font-bold text-gray-700 mb-4 border-b pb-2">بيانات الاتصال</h3>
+      <div class="space-y-4">
+        <div>
+          <label class="form-label flex items-center gap-2">
+            🌱 رابط Growing API
+            <span id="test-dot-growing" class="test-dot"></span>
+          </label>
+          <div class="flex gap-2">
+            <input id="set-growing" type="url" class="form-input flex-1" placeholder="https://script.google.com/...">
+            <button onclick="testApi('growing')" class="bg-farm-100 hover:bg-farm-200 text-farm-700 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap">اختبار</button>
+          </div>
+        </div>
+        <div>
+          <label class="form-label flex items-center gap-2">
+            💰 رابط Finance API
+            <span id="test-dot-finance" class="test-dot"></span>
+          </label>
+          <div class="flex gap-2">
+            <input id="set-finance" type="url" class="form-input flex-1" placeholder="https://script.google.com/...">
+            <button onclick="testApi('finance')" class="bg-farm-100 hover:bg-farm-200 text-farm-700 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap">اختبار</button>
+          </div>
+        </div>
+        <div>
+          <label class="form-label flex items-center gap-2">
+            🤖 رابط AI API
+            <span id="test-dot-ai" class="test-dot"></span>
+          </label>
+          <div class="flex gap-2">
+            <input id="set-ai" type="url" class="form-input flex-1" placeholder="https://script.google.com/...">
+            <button onclick="testApi('ai')" class="bg-farm-100 hover:bg-farm-200 text-farm-700 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap">اختبار</button>
+          </div>
+        </div>
+        <div>
+          <label class="form-label">🔑 مفتاح Dashboard</label>
+          <input id="set-key" type="text" class="form-input">
+        </div>
+        <div>
+          <label class="form-label">🔒 كلمة سر المالية</label>
+          <input id="set-fpw" type="password" class="form-input">
+        </div>
+      </div>
+      <div class="flex gap-3 mt-5">
+        <button onclick="saveSettings()" class="flex-1 bg-farm-700 hover:bg-farm-600 text-white py-2.5 rounded-xl font-bold">
+          حفظ الإعدادات
+        </button>
+      </div>
+    </div>
+
+    <!-- Farm info card -->
+    <div class="card p-5 mb-4">
+      <h3 class="font-bold text-gray-700 mb-3 border-b pb-2">معلومات المزرعة</h3>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between"><span class="text-gray-500">المزرعة</span><span class="font-bold text-farm-700" id="info-name">—</span></div>
+        <div class="flex justify-between"><span class="text-gray-500">المالك 1</span><span id="info-owner1">—</span></div>
+        <div class="flex justify-between"><span class="text-gray-500">المالك 2</span><span id="info-owner2">—</span></div>
+        <div class="flex justify-between"><span class="text-gray-500">الهاتف</span><span id="info-phone" dir="ltr">—</span></div>
+        <div class="flex justify-between"><span class="text-gray-500">البريد</span><span id="info-email">—</span></div>
+        <div class="flex justify-between"><span class="text-gray-500">العنوان</span><span id="info-address">—</span></div>
+        <div class="flex justify-between"><span class="text-gray-500">الإصدار</span><span id="info-version" dir="ltr" class="text-farm-600 font-mono text-xs">—</span></div>
+      </div>
+    </div>
+
+    <button onclick="logout()" class="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-3 rounded-xl font-bold">
+      🚪 تسجيل الخروج
+    </button>
+  </div>
+
+</div><!-- /main-content -->
+
+<!-- ══════════════ CYCLE CREATE MODAL ══════════════ -->
+<div id="modal-backdrop" onclick="closeModal(event)">
+  <div id="modal-box">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-farm-700 font-bold text-lg">إنشاء دورة جديدة</h3>
+      <button onclick="closeModalDirect()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+    </div>
+    <div class="space-y-3">
+      <div>
+        <label class="form-label">اسم الدورة *</label>
+        <input id="cy-name" type="text" class="form-input" placeholder="مثال: دورة 2024-01">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="form-label">تاريخ البداية</label>
+          <input id="cy-start" type="date" class="form-input">
+        </div>
+        <div>
+          <label class="form-label">تاريخ الحصاد المتوقع</label>
+          <input id="cy-harvest-date" type="date" class="form-input">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="form-label">الغرفة</label>
+          <input id="cy-room" type="text" class="form-input" placeholder="الغرفة 1">
+        </div>
+        <div>
+          <label class="form-label">عدد الأكياس</label>
+          <input id="cy-bags" type="number" class="form-input" placeholder="500">
+        </div>
+      </div>
+      <div>
+        <label class="form-label">الركيزة (Substrate)</label>
+        <input id="cy-substrate" type="text" class="form-input" placeholder="نشارة خشب + نخالة">
+      </div>
+      <div>
+        <label class="form-label">ملاحظات</label>
+        <textarea id="cy-notes" rows="2" class="form-input" placeholder="..."></textarea>
+      </div>
+      <div class="flex items-center gap-2 py-1">
+        <input id="cy-activate" type="checkbox" class="w-4 h-4 accent-farm-700">
+        <label class="text-sm font-medium text-gray-700" for="cy-activate">تفعيل فوراً بعد الإنشاء</label>
+      </div>
+      <button onclick="submitCycle()" class="w-full bg-farm-700 hover:bg-farm-600 text-white py-2.5 rounded-xl font-bold mt-2">
+        إنشاء الدورة
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ CONFIRM MODAL ══════════════ -->
+<div id="confirm-backdrop">
+  <div id="confirm-box">
+    <div class="text-4xl mb-3">⚠️</div>
+    <p id="confirm-msg" class="text-gray-700 font-medium mb-5">هل أنت متأكد؟</p>
+    <div class="flex gap-3 justify-center">
+      <button id="confirm-ok" class="bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-lg font-bold">تأكيد</button>
+      <button onclick="closeConfirm()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2 rounded-lg font-medium">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ TOAST ══════════════ -->
+<div id="toast-container"></div>
+
+<!-- ══════════════ SCRIPTS ══════════════ -->
+<script>
+// ─── State ───────────────────────────────────────────────
+const LS = {
+  GROWING_URL: 'farm_api_url',
+  FINANCE_URL: 'farm_finance_url',
+  AI_URL:      'farm_ai_url',
+  KEY:         'farm_dashboard_key',
+  FINANCE_PW:  'farm_finance_pw',
+  WORKER:      'farm_worker_name'
+};
+
+const state = {
+  growingUrl: '',
+  financeUrl: '',
+  aiUrl:      '',
+  key:        '',
+  financePw:  '',
+  currentTab: 'home',
+  cycles:     [],
+  activeCycle: null,
+  iframesLoaded: { room3d: false, chat: false }
+};
+
+// ─── Init ─────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  loadStateFromStorage();
+  populateFarmInfo();
+
+  const cfg = window.FARM_CONFIG || {};
+  const isPlaceholder = v => !v || v.includes('PASTE_YOUR') || v.length < 20;
+
+  // Auto-connect from config if not already set
+  if (!state.growingUrl && !isPlaceholder(cfg.GROWING_URL)) {
+    state.growingUrl = cfg.GROWING_URL;
+    state.financeUrl = cfg.FINANCE_URL || '';
+    state.aiUrl      = cfg.AI_URL      || '';
+    state.key        = cfg.DASHBOARD_KEY    || 'FARM2026';
+    state.financePw  = cfg.FINANCE_PASSWORD || 'FARM2026';
+    persistState();
+  }
+
+  if (state.growingUrl && !isPlaceholder(state.growingUrl)) {
+    showApp();
+  } else {
+    prefillConnectScreen(cfg);
+    document.getElementById('connect-screen').classList.remove('hidden');
+  }
+});
+
+function loadStateFromStorage() {
+  state.growingUrl = localStorage.getItem(LS.GROWING_URL) || '';
+  state.financeUrl = localStorage.getItem(LS.FINANCE_URL) || '';
+  state.aiUrl      = localStorage.getItem(LS.AI_URL)      || '';
+  state.key        = localStorage.getItem(LS.KEY)         || 'FARM2026';
+  state.financePw  = localStorage.getItem(LS.FINANCE_PW)  || 'FARM2026';
+}
+
+function persistState() {
+  localStorage.setItem(LS.GROWING_URL, state.growingUrl);
+  localStorage.setItem(LS.FINANCE_URL, state.financeUrl);
+  localStorage.setItem(LS.AI_URL,      state.aiUrl);
+  localStorage.setItem(LS.KEY,         state.key);
+  localStorage.setItem(LS.FINANCE_PW,  state.financePw);
+  localStorage.setItem(LS.WORKER,      'Owner');
+
+  // Mirror to other apps
+  localStorage.setItem('room3d_url',   state.growingUrl);
+  localStorage.setItem('room3d_key',   state.key);
+  localStorage.setItem('dash_url',     state.growingUrl);
+  localStorage.setItem('dash_key',     state.key);
+  localStorage.setItem('ai_chat_url',  state.aiUrl);
+  localStorage.setItem('fin_api_url',  state.financeUrl);
+  localStorage.setItem('fin_password', state.financePw);
+  localStorage.setItem('fin_worker',   'Owner');
+  localStorage.setItem('settings', JSON.stringify({ apiUrl: state.growingUrl, workerName: 'Owner' }));
+}
+
+function prefillConnectScreen(cfg) {
+  const isPlaceholder = v => !v || v.includes('PASTE_YOUR');
+  if (!isPlaceholder(cfg.GROWING_URL)) document.getElementById('conn-growing').value = cfg.GROWING_URL;
+  if (!isPlaceholder(cfg.FINANCE_URL)) document.getElementById('conn-finance').value = cfg.FINANCE_URL;
+  if (!isPlaceholder(cfg.AI_URL))      document.getElementById('conn-ai').value      = cfg.AI_URL;
+  if (cfg.DASHBOARD_KEY)    document.getElementById('conn-key').value  = cfg.DASHBOARD_KEY;
+  if (cfg.FINANCE_PASSWORD) document.getElementById('conn-fpw').value  = cfg.FINANCE_PASSWORD;
+}
+
+function connectSave() {
+  const gUrl = document.getElementById('conn-growing').value.trim();
+  if (!gUrl) { toast('يرجى إدخال رابط Growing API', 'error'); return; }
+  state.growingUrl = gUrl;
+  state.financeUrl = document.getElementById('conn-finance').value.trim();
+  state.aiUrl      = document.getElementById('conn-ai').value.trim();
+  state.key        = document.getElementById('conn-key').value.trim() || 'FARM2026';
+  state.financePw  = document.getElementById('conn-fpw').value.trim() || 'FARM2026';
+  persistState();
+  document.getElementById('connect-screen').classList.add('hidden');
+  showApp();
+}
+
+function showApp() {
+  loadSettingsFields();
+  switchTab('home');
+  loadHomeData();
+}
+
+function populateFarmInfo() {
+  const cfg = window.FARM_CONFIG || {};
+  setEl('info-name',    cfg.FARM_NAME   || 'MAKNABIS');
+  setEl('info-owner1',  cfg.OWNER_1     || '—');
+  setEl('info-owner2',  cfg.OWNER_2     || '—');
+  setEl('info-phone',   cfg.PHONE       || '—');
+  setEl('info-email',   cfg.EMAIL       || '—');
+  setEl('info-address', cfg.ADDRESS     || '—');
+  setEl('info-version', cfg.VERSION     || '—');
+}
+
+// ─── Tabs ─────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.remove('hidden');
+  document.querySelector('[data-tab="' + name + '"]').classList.add('active');
+  state.currentTab = name;
+
+  if (name === 'home')     loadHomeData();
+  if (name === 'cycles')   loadCycles();
+  if (name === 'growing')  { loadCyclesForFilter(); loadGrowingData(); }
+  if (name === 'finance')  loadFinanceTab();
+  if (name === 'room3d')   lazyLoadIframe('room-iframe', 'room3d.html');
+  if (name === 'chat')     lazyLoadIframe('chat-iframe', 'chat.html');
+}
+
+function lazyLoadIframe(id, src) {
+  const iframe = document.getElementById(id);
+  if (iframe.src === 'about:blank' || iframe.src === location.href.replace(/[^/]*$/, '') + 'about:blank') {
+    iframe.src = src;
+  }
+}
+
+function refreshCurrentTab() {
+  const t = state.currentTab;
+  if (t === 'home')    loadHomeData();
+  if (t === 'cycles')  loadCycles();
+  if (t === 'growing') loadGrowingData();
+  if (t === 'finance') loadFinanceTab();
+}
+
+// ─── API helpers ─────────────────────────────────────────
+async function apiGrowing(params) {
+  const url = state.growingUrl + '?' + new URLSearchParams(params);
+  const resp = await fetch(url);
+  return resp.json();
+}
+
+async function postGrowing(payload) {
+  const body = new URLSearchParams();
+  body.append('payload', JSON.stringify(payload));
+  const resp = await fetch(state.growingUrl, {
+    method: 'POST',
+    redirect: 'follow',
+    body
+  });
+  return resp.json();
+}
+
+async function apiFinance(action, data = {}) {
+  const resp = await fetch(state.financeUrl, {
+    method: 'POST',
+    redirect: 'follow',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, data: { password: state.financePw, workerName: 'Owner', ...data } })
+  });
+  const json = await resp.json();
+  return json.data !== undefined ? json.data : json;
+}
+
+// ─── HOME TAB ─────────────────────────────────────────────
+async function loadHomeData() {
+  setLoading('home-loading', true);
+  try {
+    await Promise.all([loadGrowingKPIs(), loadFinanceKPIs()]);
+  } catch(e) {
+    toast('خطأ في تحميل البيانات: ' + e.message, 'error');
+  }
+  setLoading('home-loading', false);
+}
+
+async function loadGrowingKPIs() {
+  try {
+    const data = await apiGrowing({ mode: 'dashboard', key: state.key });
+    if (data.error) { showAlertsError(data.error); return; }
+
+    const cycle = data.active_cycle || data.cycle || {};
+    const summary = data.summary || data || {};
+
+    setEl('home-cycle-name', cycle.name || data.cycle_name || '—');
+    setEl('home-stage', summary.stage || data.stage || '—');
+    setEl('kpi-day',     summary.day   || data.day   || '—');
+    setEl('kpi-stage',   summary.stage || data.stage || '—');
+    setEl('kpi-harvest', fmt(summary.harvest_today ?? data.harvest_today ?? '—'));
+    setEl('kpi-bags',    summary.bag_count || data.bag_count || '—');
+
+    state.activeCycle = cycle;
+
+    // Alerts
+    const alerts = data.alerts || [];
+    renderAlerts(alerts);
+  } catch(e) {
+    showAlertsError('تعذر الاتصال بـ Growing API');
+  }
+}
+
+async function loadFinanceKPIs() {
+  if (!state.financeUrl) return;
+  try {
+    const data = await apiFinance('getTodayStats');
+    setEl('fin-kpi-sales',     fmt(data.sales     ?? data.total_sales     ?? '—'));
+    setEl('fin-kpi-purchases', fmt(data.purchases ?? data.total_purchases ?? '—'));
+    setEl('fin-kpi-payroll',   fmt(data.payroll   ?? data.total_payroll   ?? '—'));
+    setEl('fin-kpi-expenses',  fmt(data.operating ?? data.total_operating ?? '—'));
+  } catch(e) {
+    // Finance may not be configured, silently skip
+  }
+}
+
+function renderAlerts(alerts) {
+  const container = document.getElementById('alerts-list');
+  if (!alerts || !alerts.length) {
+    container.innerHTML = '<p class="text-gray-400 text-sm text-center py-2">لا توجد تنبيهات حالياً ✓</p>';
+    return;
+  }
+  container.innerHTML = alerts.map(a => {
+    const level = a.level || a.type || 'info';
+    const cls = level === 'error' ? 'error' : (level === 'warn' || level === 'warning' ? 'warn' : 'info');
+    const icon = cls === 'error' ? '🔴' : (cls === 'warn' ? '🟡' : 'ℹ️');
+    return `<div class="alert-item ${cls}">
+      <span>${icon}</span>
+      <div>
+        <p class="text-sm font-medium">${esc(a.message || a.text || JSON.stringify(a))}</p>
+        ${a.time ? `<p class="text-xs text-gray-400 mt-0.5">${esc(a.time)}</p>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function showAlertsError(msg) {
+  document.getElementById('alerts-list').innerHTML =
+    `<div class="alert-item error"><span>🔴</span><p class="text-sm">${esc(msg)}</p></div>`;
+}
+
+// ─── CYCLES TAB ──────────────────────────────────────────
+async function loadCycles() {
+  setLoading('cycles-loading', true);
+  document.getElementById('cycles-grid').innerHTML = '';
+  try {
+    const data = await apiGrowing({ mode: 'get_cycles', key: state.key });
+    const cycles = data.cycles || data.data || data || [];
+    state.cycles = Array.isArray(cycles) ? cycles : [];
+    renderCycles(state.cycles);
+  } catch(e) {
+    toast('خطأ في تحميل الدورات: ' + e.message, 'error');
+  }
+  setLoading('cycles-loading', false);
+}
+
+function renderCycles(cycles) {
+  const grid = document.getElementById('cycles-grid');
+  if (!cycles.length) {
+    grid.innerHTML = '<p class="text-gray-400 text-center py-8 col-span-2">لا توجد دورات. أنشئ دورة جديدة!</p>';
+    return;
+  }
+  grid.innerHTML = cycles.map(c => {
+    const status = (c.status || 'planning').toLowerCase();
+    const badgeClass = {
+      active: 'badge-active', planning: 'badge-planning',
+      harvesting: 'badge-harvesting', closed: 'badge-closed'
+    }[status] || 'badge-planning';
+    const statusAr = { active: 'نشطة', planning: 'تخطيط', harvesting: 'حصاد', closed: 'مغلقة' }[status] || status;
+    return `
+    <div class="cycle-card ${status}">
+      <div class="flex items-start justify-between gap-2 mb-2">
+        <div>
+          <span class="text-xs text-gray-400 font-mono">#${esc(c.id || c.cycle_id || '?')}</span>
+          <h4 class="font-bold text-gray-800">${esc(c.name || '—')}</h4>
+        </div>
+        <span class="badge ${badgeClass}">${statusAr}</span>
+      </div>
+      <div class="text-xs text-gray-500 space-y-0.5 mb-3">
+        <div>📅 ${esc(c.start_date || '—')}</div>
+        <div>🛍 ${esc(c.bag_count || '—')} كيس</div>
+        ${c.room ? `<div>🏠 ${esc(c.room)}</div>` : ''}
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        ${status !== 'active' && status !== 'closed' ? `
+          <button onclick="activateCycle('${esc(c.id || c.cycle_id)}')"
+            class="bg-farm-700 hover:bg-farm-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium">
+            ✓ تفعيل
+          </button>` : ''}
+        ${status !== 'closed' ? `
+          <button onclick="closeCycle('${esc(c.id || c.cycle_id)}')"
+            class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs px-3 py-1.5 rounded-lg font-medium">
+            ✕ إغلاق
+          </button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openCycleModal() {
+  // Set today as default start date
+  document.getElementById('cy-start').value = new Date().toISOString().split('T')[0];
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('modal-backdrop')) closeModalDirect();
+}
+function closeModalDirect() {
+  document.getElementById('modal-backdrop').classList.remove('open');
+}
+
+async function submitCycle() {
+  const name = document.getElementById('cy-name').value.trim();
+  if (!name) { toast('يرجى إدخال اسم الدورة', 'error'); return; }
+  const payload = {
+    type: 'cycle_create',
+    key: state.key,
+    workerName: 'Owner',
+    name,
+    start_date:            document.getElementById('cy-start').value,
+    expected_harvest_date: document.getElementById('cy-harvest-date').value,
+    room:       document.getElementById('cy-room').value,
+    bag_count:  document.getElementById('cy-bags').value,
+    substrate:  document.getElementById('cy-substrate').value,
+    notes:      document.getElementById('cy-notes').value,
+    auto_activate: document.getElementById('cy-activate').checked
+  };
+  try {
+    const resp = await postGrowing(payload);
+    if (resp.success || resp.status === 'ok') {
+      toast('تم إنشاء الدورة بنجاح', 'success');
+      closeModalDirect();
+      loadCycles();
+      // Reset form
+      ['cy-name','cy-start','cy-harvest-date','cy-room','cy-bags','cy-substrate','cy-notes'].forEach(id => {
+        document.getElementById(id).value = '';
+      });
+      document.getElementById('cy-activate').checked = false;
+    } else {
+      toast('خطأ: ' + (resp.message || resp.error || JSON.stringify(resp)), 'error');
+    }
+  } catch(e) {
+    toast('خطأ في الإنشاء: ' + e.message, 'error');
+  }
+}
+
+async function activateCycle(id) {
+  confirmAction('هل تريد تفعيل هذه الدورة؟', async () => {
+    try {
+      const resp = await postGrowing({ type: 'cycle_set_active', key: state.key, cycle_id: id, workerName: 'Owner' });
+      if (resp.success || resp.status === 'ok') { toast('تم تفعيل الدورة', 'success'); loadCycles(); }
+      else toast('خطأ: ' + (resp.message || resp.error || ''), 'error');
+    } catch(e) { toast('خطأ: ' + e.message, 'error'); }
+  });
+}
+
+async function closeCycle(id) {
+  confirmAction('هل تريد إغلاق هذه الدورة؟ لا يمكن التراجع.', async () => {
+    try {
+      const resp = await postGrowing({ type: 'cycle_close', key: state.key, cycle_id: id, workerName: 'Owner' });
+      if (resp.success || resp.status === 'ok') { toast('تم إغلاق الدورة', 'success'); loadCycles(); }
+      else toast('خطأ: ' + (resp.message || resp.error || ''), 'error');
+    } catch(e) { toast('خطأ: ' + e.message, 'error'); }
+  });
+}
+
+// ─── GROWING TAB ─────────────────────────────────────────
+async function loadCyclesForFilter() {
+  try {
+    const data = await apiGrowing({ mode: 'get_cycles', key: state.key });
+    const cycles = data.cycles || data.data || data || [];
+    const sel = document.getElementById('growing-cycle-filter');
+    sel.innerHTML = '<option value="">— كل الدورات —</option>';
+    if (Array.isArray(cycles)) {
+      cycles.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id || c.cycle_id || '';
+        opt.textContent = c.name || c.id;
+        sel.appendChild(opt);
+      });
+    }
+  } catch(e) {}
+}
+
+async function loadGrowingData() {
+  const sheet = document.getElementById('growing-sheet-filter').value;
+  const cycleId = document.getElementById('growing-cycle-filter').value;
+  setLoading('growing-loading', true);
+  clearTable('growing-thead', 'growing-tbody');
+  try {
+    const params = { mode: 'recent', sheet, key: state.key, limit: 50 };
+    if (cycleId) params.cycle_id = cycleId;
+    const data = await apiGrowing(params);
+    const rows = data.rows || data.data || data || [];
+    renderGrowingTable(Array.isArray(rows) ? rows : [], sheet);
+  } catch(e) {
+    toast('خطأ في تحميل بيانات التشغيل: ' + e.message, 'error');
+  }
+  setLoading('growing-loading', false);
+}
+
+function renderGrowingTable(rows, sheet) {
+  const thead = document.getElementById('growing-thead');
+  const tbody = document.getElementById('growing-tbody');
+  if (!rows.length) {
+    thead.innerHTML = '<th>—</th>';
+    tbody.innerHTML = '<tr><td class="text-center text-gray-400 py-6">لا توجد بيانات</td></tr>';
+    return;
+  }
+  const keys = Object.keys(rows[0]).filter(k => k !== '_row');
+  thead.innerHTML = '<th>#</th>' + keys.map(k => `<th>${esc(k)}</th>`).join('') + '<th></th>';
+  tbody.innerHTML = rows.map((row, i) => {
+    const rowNum = row._row || (i + 2);
+    const cells = keys.map(k => `<td>${esc(row[k] ?? '')}</td>`).join('');
+    return `<tr>
+      <td class="text-gray-400 text-xs">${rowNum}</td>
+      ${cells}
+      <td>
+        <button onclick="deleteGrowingRow('${esc(sheet)}', ${rowNum})"
+          class="text-red-400 hover:text-red-600 text-lg leading-none" title="حذف">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function deleteGrowingRow(sheet, rowNum) {
+  confirmAction(`حذف الصف رقم ${rowNum} من جدول "${sheet}"؟`, async () => {
+    try {
+      const resp = await postGrowing({ type: 'delete_row', key: state.key, sheet, row_number: rowNum, workerName: 'Owner' });
+      if (resp.success || resp.status === 'ok') { toast('تم الحذف', 'success'); loadGrowingData(); }
+      else toast('خطأ: ' + (resp.message || resp.error || ''), 'error');
+    } catch(e) { toast('خطأ: ' + e.message, 'error'); }
+  });
+}
+
+// ─── FINANCE TAB ─────────────────────────────────────────
+async function loadFinanceTab() {
+  setLoading('fin-loading', true);
+  try {
+    await Promise.all([loadFinanceCycleKPIs(), loadFinanceData()]);
+  } catch(e) {
+    toast('خطأ في تحميل البيانات المالية', 'error');
+  }
+  setLoading('fin-loading', false);
+}
+
+async function loadFinanceCycleKPIs() {
+  if (!state.financeUrl) return;
+  try {
+    const data = await apiFinance('getCycleStats');
+    const kpis = [
+      { key: 'cycle_sales',       label: 'مبيعات الدورة',   color: 'text-farm-700' },
+      { key: 'cycle_purchases',   label: 'مشتريات الدورة',  color: 'text-orange-500' },
+      { key: 'cycle_operating',   label: 'تشغيل',            color: 'text-orange-500' },
+      { key: 'cycle_payroll',     label: 'أجور',             color: 'text-orange-500' },
+      { key: 'cycle_construction',label: 'إنشاء',            color: 'text-blue-500' },
+      { key: 'cycle_production',  label: 'إنتاج',            color: 'text-blue-500' },
+      { key: 'pnl',               label: 'الربح/الخسارة',   color: 'pnl-dynamic' },
+      { key: 'cost_per_kg',       label: 'التكلفة/كغ',      color: 'text-gray-700' }
+    ];
+    const container = document.getElementById('fin-cycle-kpis');
+    container.innerHTML = kpis.map(kpi => {
+      const val = data[kpi.key] ?? '—';
+      let colorClass = kpi.color;
+      if (kpi.key === 'pnl') {
+        const n = parseFloat(val);
+        colorClass = isNaN(n) ? 'text-gray-700' : (n >= 0 ? 'pnl-pos' : 'pnl-neg');
+      }
+      return `<div class="kpi-card text-center">
+        <p class="text-gray-400 text-xs mb-1">${kpi.label}</p>
+        <p class="text-xl font-bold ${colorClass}">${fmt(val)}</p>
+        <p class="text-gray-400 text-xs">د.ت</p>
+      </div>`;
+    }).join('');
+  } catch(e) {}
+}
+
+async function loadFinanceData() {
+  if (!state.financeUrl) return;
+  const sheet = document.getElementById('finance-sheet-filter').value;
+  clearTable('finance-thead', 'finance-tbody');
+  try {
+    const data = await apiFinance('getRecent', { sheetName: sheet, limit: 50 });
+    const rows = data.rows || data.data || data || [];
+    renderFinanceTable(Array.isArray(rows) ? rows : [], sheet);
+  } catch(e) {
+    toast('خطأ في تحميل بيانات المالية: ' + e.message, 'error');
+  }
+}
+
+function renderFinanceTable(rows, sheet) {
+  const thead = document.getElementById('finance-thead');
+  const tbody = document.getElementById('finance-tbody');
+  if (!rows.length) {
+    thead.innerHTML = '<th>—</th>';
+    tbody.innerHTML = '<tr><td class="text-center text-gray-400 py-6">لا توجد بيانات</td></tr>';
+    return;
+  }
+  const keys = Object.keys(rows[0]).filter(k => k !== '_row');
+  thead.innerHTML = '<th>#</th>' + keys.map(k => `<th>${esc(k)}</th>`).join('') + '<th></th>';
+  tbody.innerHTML = rows.map((row, i) => {
+    const rowNum = row._row || (i + 2);
+    const cells = keys.map(k => `<td>${esc(row[k] ?? '')}</td>`).join('');
+    return `<tr>
+      <td class="text-gray-400 text-xs">${rowNum}</td>
+      ${cells}
+      <td>
+        <button onclick="deleteFinanceRow('${esc(sheet)}', ${rowNum})"
+          class="text-red-400 hover:text-red-600 text-lg leading-none" title="حذف">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function deleteFinanceRow(sheetName, rowNumber) {
+  confirmAction(`حذف الصف رقم ${rowNumber} من جدول "${sheetName}"؟`, async () => {
+    try {
+      const resp = await apiFinance('deleteRow', { sheetName, rowNumber });
+      if (resp.success || resp.status === 'ok' || resp === true) {
+        toast('تم الحذف', 'success'); loadFinanceData();
+      } else {
+        toast('خطأ: ' + (resp.message || resp.error || JSON.stringify(resp)), 'error');
+      }
+    } catch(e) { toast('خطأ: ' + e.message, 'error'); }
+  });
+}
+
+// ─── SETTINGS TAB ────────────────────────────────────────
+function loadSettingsFields() {
+  document.getElementById('set-growing').value = state.growingUrl;
+  document.getElementById('set-finance').value = state.financeUrl;
+  document.getElementById('set-ai').value      = state.aiUrl;
+  document.getElementById('set-key').value     = state.key;
+  document.getElementById('set-fpw').value     = state.financePw;
+}
+
+function saveSettings() {
+  state.growingUrl = document.getElementById('set-growing').value.trim();
+  state.financeUrl = document.getElementById('set-finance').value.trim();
+  state.aiUrl      = document.getElementById('set-ai').value.trim();
+  state.key        = document.getElementById('set-key').value.trim();
+  state.financePw  = document.getElementById('set-fpw').value.trim();
+  persistState();
+  toast('تم حفظ الإعدادات بنجاح', 'success');
+}
+
+async function testApi(which) {
+  const dot = document.getElementById('test-dot-' + which);
+  dot.className = 'test-dot';
+  dot.style.background = '#aaa';
+  try {
+    if (which === 'growing') {
+      const d = await apiGrowing({ mode: 'ping', key: state.key });
+      dot.className = 'test-dot ok';
+      toast('Growing API: متصل ✓', 'success');
+    } else if (which === 'finance') {
+      const d = await apiFinance('ping');
+      dot.className = 'test-dot ok';
+      toast('Finance API: متصل ✓', 'success');
+    } else if (which === 'ai') {
+      const resp = await fetch(state.aiUrl + '?mode=ping&key=' + state.key);
+      await resp.json();
+      dot.className = 'test-dot ok';
+      toast('AI API: متصل ✓', 'success');
+    }
+  } catch(e) {
+    dot.className = 'test-dot err';
+    toast((which === 'growing' ? 'Growing' : which === 'finance' ? 'Finance' : 'AI') + ' API: فشل الاتصال ✗', 'error');
+  }
+}
+
+function logout() {
+  confirmAction('هل تريد تسجيل الخروج ومسح جميع الإعدادات؟', () => {
+    Object.values(LS).forEach(k => localStorage.removeItem(k));
+    ['room3d_url','room3d_key','dash_url','dash_key','ai_chat_url','fin_api_url','fin_password','fin_worker','settings']
+      .forEach(k => localStorage.removeItem(k));
+    location.reload();
+  });
+}
+
+// ─── Confirm modal ────────────────────────────────────────
+let confirmCallback = null;
+function confirmAction(msg, cb) {
+  confirmCallback = cb;
+  document.getElementById('confirm-msg').textContent = msg;
+  document.getElementById('confirm-backdrop').classList.add('open');
+  document.getElementById('confirm-ok').onclick = () => { closeConfirm(); cb(); };
+}
+function closeConfirm() {
+  document.getElementById('confirm-backdrop').classList.remove('open');
+  confirmCallback = null;
+}
+
+// ─── Utility ──────────────────────────────────────────────
+function toast(msg, type = 'info', duration = 3000) {
+  const container = document.getElementById('toast-container');
+  const div = document.createElement('div');
+  div.className = `toast ${type}`;
+  div.textContent = msg;
+  container.appendChild(div);
+  setTimeout(() => div.remove(), duration);
+}
+
+function setLoading(id, show) {
+  const el = document.getElementById(id);
+  if (el) el.classList[show ? 'remove' : 'add']('hidden');
+}
+
+function setEl(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+function esc(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmt(val) {
+  if (val === '—' || val === null || val === undefined) return '—';
+  const n = parseFloat(val);
+  if (isNaN(n)) return String(val);
+  return n.toLocaleString('ar-TN', { maximumFractionDigits: 2 });
+}
+
+function clearTable(theadId, tbodyId) {
+  document.getElementById(theadId).innerHTML = '<th>—</th>';
+  document.getElementById(tbodyId).innerHTML = '<tr><td class="text-center text-gray-400 py-4"><div class="spinner mx-auto"></div></td></tr>';
+}
+
+// ─── Auto-refresh ─────────────────────────────────────────
+const REFRESH_SEC = (window.FARM_CONFIG || {}).REFRESH_INTERVAL || 30;
+setInterval(() => {
+  if (state.currentTab === 'home') loadHomeData();
+}, REFRESH_SEC * 1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MAKNABIS — عامل النمو</title>
+  <link rel="manifest" href="manifest-growing.json" />
+  <meta name="theme-color" content="#16a34a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { tajawal: ['Tajawal', 'sans-serif'] }
+        }
+      }
+    };
+  </script>
+  <style>
+    * { font-family: 'Tajawal', sans-serif; }
+    body { direction: rtl; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .toast { position: fixed; bottom: 1.5rem; right: 50%; transform: translateX(50%); z-index: 9999; min-width: 260px; max-width: 90vw; text-align: center; }
+    .fade-in { animation: fadeIn 0.25s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .card-hover { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+    .sticky-bar { position: sticky; bottom: 0; background: white; border-top: 1px solid #e5e7eb; padding: 1rem; z-index: 10; }
+    input[type=number]::-webkit-inner-spin-button { opacity: 1; }
+    .section-header { background: linear-gradient(135deg, #16a34a, #059669); }
+    select option { direction: rtl; }
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+    .modal-overlay.open { display: flex; }
+  </style>
+  <script src="config.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- ═══════════════════════════════════════ TOAST ═══ -->
+<div id="toast" class="toast hidden">
+  <div id="toast-inner" class="px-5 py-3 rounded-2xl shadow-lg text-white text-sm font-medium"></div>
+</div>
+
+<!-- ═══════════════════════════════════ SETTINGS MODAL ═══ -->
+<div id="settings-modal" class="modal-overlay" onclick="closeSettingsIfOverlay(event)">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 fade-in">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="text-lg font-bold text-gray-800">⚙️ الإعدادات</h3>
+      <button onclick="closeSettings()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">اسم العامل</label>
+        <input id="modal-worker-name" type="text" placeholder="اسمك هنا" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">رابط API</label>
+        <input id="modal-api-url" type="url" placeholder="https://script.google.com/..." class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-left" dir="ltr" />
+      </div>
+      <button onclick="testConnection()" class="w-full bg-blue-50 text-blue-700 border border-blue-200 rounded-xl py-2 text-sm font-medium hover:bg-blue-100 transition">🔌 اختبر الاتصال</button>
+      <button onclick="saveSettings()" class="w-full bg-green-600 text-white rounded-xl py-2 text-sm font-bold hover:bg-green-700 transition">حفظ الإعدادات</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ SCREEN: SETUP ═══ -->
+<div id="screen-setup" class="screen active min-h-screen flex flex-col items-center justify-center p-6">
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-8">
+      <div class="text-6xl mb-3">🍄</div>
+      <h1 class="text-3xl font-black text-green-700">MAKNABIS</h1>
+      <p class="text-gray-500 text-sm mt-1">بوابة عامل النمو</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1.5">اسمك</label>
+        <input id="setup-worker-name" type="text" placeholder="مثال: محمد العامري" class="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 text-base" />
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1.5">رابط API</label>
+        <input id="setup-api-url" type="url" placeholder="https://script.google.com/macros/s/..." class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-left" dir="ltr" />
+        <p class="text-xs text-gray-400 mt-1">اطلب هذا الرابط من المالك</p>
+      </div>
+      <button onclick="setupAndGo()" class="w-full bg-green-600 text-white rounded-xl py-3.5 font-bold text-base hover:bg-green-700 active:scale-95 transition">دخول 🚀</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ SCREEN: HOME ═══ -->
+<div id="screen-home" class="screen min-h-screen pb-8">
+  <!-- Top Bar -->
+  <div class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-20">
+    <div class="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">🍄</span>
+        <div>
+          <div class="font-black text-green-700 text-base leading-tight">MAKNABIS</div>
+          <div id="home-worker-tag" class="text-xs text-gray-400">عامل النمو</div>
+        </div>
+      </div>
+      <button onclick="openSettings()" class="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition text-base">⚙️</button>
+    </div>
+  </div>
+
+  <div class="max-w-lg mx-auto px-4 pt-4 space-y-4">
+    <!-- Cycle Banner -->
+    <div id="cycle-banner"></div>
+
+    <!-- Refresh Cycles -->
+    <button onclick="loadCycles()" class="w-full text-xs text-gray-400 hover:text-green-600 py-1 flex items-center justify-center gap-1.5 transition">
+      <span id="refresh-icon">🔄</span> تحديث الدورات
+    </button>
+
+    <!-- Phase Grid -->
+    <div>
+      <h2 class="text-sm font-bold text-gray-500 mb-3 px-1">اختر المرحلة</h2>
+      <div id="phase-grid" class="grid grid-cols-2 gap-3"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ SCREEN: CHECKLIST ═══ -->
+<div id="screen-checklist" class="screen min-h-screen pb-32">
+  <!-- Top Bar -->
+  <div class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-20">
+    <div class="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
+      <button onclick="goHome()" class="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition text-base">←</button>
+      <div class="flex-1">
+        <div id="checklist-title" class="font-bold text-gray-800 text-base"></div>
+        <div id="checklist-cycle-tag" class="text-xs text-gray-400"></div>
+      </div>
+      <button onclick="openSettings()" class="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition text-base">⚙️</button>
+    </div>
+  </div>
+
+  <div class="max-w-lg mx-auto px-4 pt-4">
+    <div id="checklist-body" class="space-y-4"></div>
+  </div>
+
+  <!-- Sticky Submit Bar -->
+  <div class="sticky-bar">
+    <div class="max-w-lg mx-auto">
+      <button onclick="submitChecklist()" id="submit-btn" class="w-full bg-green-600 text-white rounded-2xl py-4 font-bold text-base hover:bg-green-700 active:scale-95 transition shadow-lg">
+        💾 حفظ القراءة
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ SCREEN: SUBMIT OK ═══ -->
+<div id="screen-submit-ok" class="screen min-h-screen flex flex-col items-center justify-center p-6 text-center">
+  <div class="max-w-sm w-full space-y-6">
+    <div class="text-8xl animate-bounce">✅</div>
+    <div>
+      <h2 class="text-2xl font-black text-green-700 mb-2">تم الحفظ!</h2>
+      <p id="ok-message" class="text-gray-500 text-sm"></p>
+    </div>
+    <div class="space-y-3">
+      <button onclick="goHome()" class="w-full bg-green-600 text-white rounded-2xl py-4 font-bold text-base hover:bg-green-700 transition">العودة للرئيسية</button>
+      <button onclick="submitAnother()" class="w-full bg-gray-100 text-gray-600 rounded-2xl py-3 font-medium text-sm hover:bg-gray-200 transition">إضافة قراءة أخرى</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════ SCRIPT ════ -->
+<script>
+'use strict';
+
+// ── Schema version ─────────────────────────────────────────────────────────
+const CHECKLISTS_VERSION = 'v3_cycles';
+
+// ── State ──────────────────────────────────────────────────────────────────
+const state = {
+  apiUrl: '',
+  workerName: '',
+  activeCycle: null,
+  availableCycles: [],
+  activeChecklist: null,
+  savedData: {}
+};
+
+// ── Phase meta ─────────────────────────────────────────────────────────────
+const PHASES = {
+  setup:      { label: 'استلام الأكياس',       icon: '📦', color: 'green'   },
+  spawn_run:  { label: 'انتشار الميسيليوم',     icon: '🌱', color: 'emerald' },
+  casing:     { label: 'التغطية',               icon: '🟤', color: 'amber'   },
+  case_run:   { label: 'نمو الميسيليوم',        icon: '🌿', color: 'teal'    },
+  pinning:    { label: 'تحفيز الإثمار',         icon: '🔵', color: 'blue'    },
+  waiting:    { label: 'انتظار الرؤوس',         icon: '⏳', color: 'purple'  },
+  harvest:    { label: 'الحصاد',                icon: '🍄', color: 'orange'  },
+  between:    { label: 'بين الموجات',           icon: '🧹', color: 'gray'    },
+  emergency:  { label: 'طوارئ',                 icon: '🚨', color: 'red'     }
+};
+
+// ── Color map ──────────────────────────────────────────────────────────────
+const COLOR = {
+  green:   { bg: 'bg-green-50',   border: 'border-green-200',   text: 'text-green-700',   btn: 'bg-green-600',   badge: 'bg-green-100 text-green-700'   },
+  emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', btn: 'bg-emerald-600', badge: 'bg-emerald-100 text-emerald-700' },
+  amber:   { bg: 'bg-amber-50',   border: 'border-amber-200',   text: 'text-amber-700',   btn: 'bg-amber-600',   badge: 'bg-amber-100 text-amber-700'   },
+  teal:    { bg: 'bg-teal-50',    border: 'border-teal-200',    text: 'text-teal-700',    btn: 'bg-teal-600',    badge: 'bg-teal-100 text-teal-700'    },
+  blue:    { bg: 'bg-blue-50',    border: 'border-blue-200',    text: 'text-blue-700',    btn: 'bg-blue-600',    badge: 'bg-blue-100 text-blue-700'    },
+  purple:  { bg: 'bg-purple-50',  border: 'border-purple-200',  text: 'text-purple-700',  btn: 'bg-purple-600',  badge: 'bg-purple-100 text-purple-700'  },
+  orange:  { bg: 'bg-orange-50',  border: 'border-orange-200',  text: 'text-orange-700',  btn: 'bg-orange-600',  badge: 'bg-orange-100 text-orange-700'  },
+  gray:    { bg: 'bg-gray-50',    border: 'border-gray-200',    text: 'text-gray-700',    btn: 'bg-gray-600',    badge: 'bg-gray-100 text-gray-700'    },
+  red:     { bg: 'bg-red-50',     border: 'border-red-200',     text: 'text-red-700',     btn: 'bg-red-600',     badge: 'bg-red-100 text-red-700'     }
+};
+
+// ── Reading session helper ─────────────────────────────────────────────────
+const SESSION_LABELS = { am: 'صباح (AM)', nn: 'ظهر (NN)', pm: 'مساء (PM)' };
+
+function envReadingSection(sessionKey) {
+  return {
+    title: SESSION_LABELS[sessionKey],
+    fields: [
+      { key: `${sessionKey}_air_temp`,     label: 'حرارة الهواء °C',   type: 'number', step: '0.1', min: '0' },
+      { key: `${sessionKey}_compost_temp`, label: 'حرارة الكومبوست °C', type: 'number', step: '0.1', min: '0' },
+      { key: `${sessionKey}_humidity`,     label: 'الرطوبة %',          type: 'number', step: '1',   min: '0', max: '100' },
+      { key: `${sessionKey}_co2`,          label: 'CO₂ ppm',            type: 'number', step: '10',  min: '0' },
+      { key: `${sessionKey}_notes`,        label: 'ملاحظات',            type: 'textarea' }
+    ]
+  };
+}
+
+function shortEnvSection(sessionKey) {
+  return {
+    title: SESSION_LABELS[sessionKey],
+    fields: [
+      { key: `${sessionKey}_air_temp`, label: 'حرارة الهواء °C', type: 'number', step: '0.1', min: '0' },
+      { key: `${sessionKey}_humidity`, label: 'الرطوبة %',        type: 'number', step: '1',   min: '0', max: '100' },
+      { key: `${sessionKey}_co2`,      label: 'CO₂ ppm',          type: 'number', step: '10',  min: '0' },
+      { key: `${sessionKey}_notes`,    label: 'ملاحظات',          type: 'textarea' }
+    ]
+  };
+}
+
+// ── Checklists ─────────────────────────────────────────────────────────────
+const CHECKLISTS = {
+
+  setup: {
+    sections: [{
+      title: 'استلام الأكياس — اليوم الأول',
+      fields: [
+        { key: 'bag_count',       label: 'عدد الأكياس',      type: 'number', step: '1', min: '0', required: true },
+        { key: 'substrate_type',  label: 'نوع الركيزة',      type: 'text' },
+        { key: 'supplier',        label: 'المورّد',           type: 'text' },
+        { key: 'bag_weight',      label: 'وزن الكيس (كغ)',   type: 'number', step: '0.1', min: '0' },
+        { key: 'notes',           label: 'ملاحظات',          type: 'textarea' }
+      ]
+    }]
+  },
+
+  spawn_run: {
+    sections: [
+      {
+        title: 'تجهيز يومي',
+        fields: [
+          { key: 'fan_status',    label: 'حالة المروحة',   type: 'select', options: ['يعمل', 'متوقف', 'جزئي'] },
+          { key: 'filter_status', label: 'حالة الفلتر',    type: 'select', options: ['نظيف', 'يحتاج تنظيف', 'تالف'] }
+        ]
+      },
+      envReadingSection('am'),
+      envReadingSection('nn'),
+      envReadingSection('pm'),
+      {
+        title: 'ملخص اليوم',
+        fields: [
+          { key: 'contamination_count', label: 'عدد الأكياس الملوثة', type: 'number', step: '1', min: '0' },
+          { key: 'notes_day',           label: 'ملاحظات اليوم',       type: 'textarea' }
+        ]
+      }
+    ]
+  },
+
+  casing: {
+    sections: [{
+      title: 'التغطية — اليوم 17',
+      fields: [
+        { key: 'casing_material',    label: 'مادة التغطية',          type: 'text' },
+        { key: 'casing_thickness_cm', label: 'سماكة الطبقة (سم)',    type: 'number', step: '0.5', min: '0' },
+        { key: 'ph',                 label: 'درجة الحموضة pH',       type: 'number', step: '0.1', min: '0', max: '14' },
+        { key: 'notes',              label: 'ملاحظات',               type: 'textarea' }
+      ]
+    }]
+  },
+
+  case_run: {
+    sections: [
+      {
+        title: 'تجهيز يومي',
+        fields: [
+          { key: 'fan_status',    label: 'حالة المروحة',  type: 'select', options: ['يعمل', 'متوقف', 'جزئي'] },
+          { key: 'filter_status', label: 'حالة الفلتر',   type: 'select', options: ['نظيف', 'يحتاج تنظيف', 'تالف'] }
+        ]
+      },
+      envReadingSection('am'),
+      envReadingSection('nn'),
+      envReadingSection('pm'),
+      {
+        title: 'ملخص اليوم',
+        fields: [
+          { key: 'contamination_count', label: 'عدد الأكياس الملوثة', type: 'number', step: '1', min: '0' },
+          { key: 'notes_day',           label: 'ملاحظات اليوم',       type: 'textarea' }
+        ]
+      }
+    ]
+  },
+
+  pinning: {
+    sections: [
+      shortEnvSection('am'),
+      shortEnvSection('nn'),
+      shortEnvSection('pm'),
+      {
+        title: 'إحصاء الدبابيس',
+        fields: [
+          { key: 'pin_count', label: 'عدد الدبابيس (تقديري)', type: 'number', step: '1', min: '0' }
+        ]
+      }
+    ]
+  },
+
+  waiting: {
+    sections: [
+      shortEnvSection('am'),
+      shortEnvSection('nn'),
+      shortEnvSection('pm'),
+      {
+        title: 'الرؤوس',
+        fields: [
+          { key: 'head_count', label: 'عدد الرؤوس الظاهرة', type: 'number', step: '1', min: '0' }
+        ]
+      }
+    ]
+  },
+
+  harvest: {
+    sections: [
+      shortEnvSection('am'),
+      shortEnvSection('nn'),
+      shortEnvSection('pm'),
+      {
+        title: 'بيانات الحصاد',
+        fields: [
+          { key: 'harvest_kg_wave1', label: 'كغ — الموجة الأولى',   type: 'number', step: '0.1', min: '0' },
+          { key: 'harvest_kg_wave2', label: 'كغ — الموجة الثانية',  type: 'number', step: '0.1', min: '0' },
+          { key: 'quality_notes',    label: 'ملاحظات الجودة',       type: 'textarea' }
+        ]
+      }
+    ]
+  },
+
+  between: {
+    sections: [{
+      title: 'مهام التنظيف بين الموجات',
+      fields: [
+        { key: 'removed_old_substrate',  label: 'إزالة الركيزة القديمة',     type: 'select', options: ['تم', 'لم يتم', 'جزئي'] },
+        { key: 'room_cleaned',           label: 'تنظيف الغرفة',              type: 'select', options: ['تم', 'لم يتم'] },
+        { key: 'disinfected',            label: 'تعقيم الأسطح',              type: 'select', options: ['تم', 'لم يتم'] },
+        { key: 'equipment_checked',      label: 'فحص المعدات',               type: 'select', options: ['تم', 'لم يتم'] },
+        { key: 'new_substrate_ready',    label: 'تجهيز الركيزة الجديدة',     type: 'select', options: ['جاهز', 'غير جاهز', 'جزئي'] },
+        { key: 'duration_hours',         label: 'مدة التنظيف (ساعات)',       type: 'number', step: '0.5', min: '0' },
+        { key: 'notes',                  label: 'ملاحظات',                   type: 'textarea' }
+      ]
+    }]
+  },
+
+  emergency: {
+    sections: [{
+      title: '🚨 بلاغ طوارئ',
+      fields: [
+        { key: 'emergency_type', label: 'نوع الطارئ', type: 'select', options: ['تلوث', 'عطل معدات', 'انقطاع كهرباء', 'تسرب مياه', 'حريق', 'آفات', 'أخرى'] },
+        { key: 'description',    label: 'وصف المشكلة',  type: 'textarea', required: true },
+        { key: 'severity',       label: 'الخطورة (1–5)', type: 'number', step: '1', min: '1', max: '5', required: true },
+        { key: 'action_taken',   label: 'الإجراء المتخذ', type: 'textarea' },
+        { key: 'photos_count',   label: 'عدد الصور المأخوذة', type: 'number', step: '1', min: '0' }
+      ]
+    }]
+  }
+};
+
+// ══════════════════════════════════════════════════════════════════
+//  UTILITIES
+// ══════════════════════════════════════════════════════════════════
+let toastTimer = null;
+function showToast(msg, type = 'info') {
+  const toast = document.getElementById('toast');
+  const inner = document.getElementById('toast-inner');
+  const colors = { info: 'bg-gray-800', success: 'bg-green-600', error: 'bg-red-600', warn: 'bg-amber-500' };
+  inner.className = `px-5 py-3 rounded-2xl shadow-lg text-white text-sm font-medium ${colors[type] || colors.info}`;
+  inner.textContent = msg;
+  toast.classList.remove('hidden');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.add('hidden'), 3500);
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById(id);
+  if (el) { el.classList.add('active'); window.scrollTo(0, 0); }
+}
+
+function saveLocal() {
+  localStorage.setItem('maknabis_worker', JSON.stringify({ workerName: state.workerName, apiUrl: state.apiUrl }));
+}
+
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem('maknabis_worker');
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (d.workerName) state.workerName = d.workerName;
+      if (d.apiUrl) state.apiUrl = d.apiUrl;
+    }
+    // Legacy fallback: settings key
+    const settings = localStorage.getItem('settings');
+    if (settings && !state.apiUrl) {
+      const s = JSON.parse(settings);
+      if (s.apiUrl) state.apiUrl = s.apiUrl;
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SETTINGS MODAL
+// ══════════════════════════════════════════════════════════════════
+function openSettings() {
+  document.getElementById('modal-worker-name').value = state.workerName;
+  document.getElementById('modal-api-url').value = state.apiUrl;
+  document.getElementById('settings-modal').classList.add('open');
+}
+
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+}
+
+function closeSettingsIfOverlay(e) {
+  if (e.target === document.getElementById('settings-modal')) closeSettings();
+}
+
+function saveSettings() {
+  const name = document.getElementById('modal-worker-name').value.trim();
+  const url  = document.getElementById('modal-api-url').value.trim();
+  if (!name) { showToast('أدخل اسمك أولاً', 'warn'); return; }
+  if (!url)  { showToast('أدخل رابط API', 'warn'); return; }
+  state.workerName = name;
+  state.apiUrl = url;
+  saveLocal();
+  closeSettings();
+  showToast('تم حفظ الإعدادات ✓', 'success');
+  document.getElementById('home-worker-tag').textContent = name;
+  loadCycles();
+}
+
+async function testConnection() {
+  const url = document.getElementById('modal-api-url').value.trim();
+  if (!url) { showToast('أدخل الرابط أولاً', 'warn'); return; }
+  showToast('جاري الاختبار…', 'info');
+  try {
+    const res = await fetch(`${url}?mode=ping`, { redirect: 'follow' });
+    const txt = await res.text();
+    showToast('الاتصال ناجح ✓', 'success');
+  } catch (e) {
+    showToast('فشل الاتصال ✗', 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SETUP SCREEN
+// ══════════════════════════════════════════════════════════════════
+async function setupAndGo() {
+  const name = document.getElementById('setup-worker-name').value.trim();
+  const url  = document.getElementById('setup-api-url').value.trim();
+  if (!name) { showToast('أدخل اسمك أولاً', 'warn'); return; }
+  if (!url)  { showToast('أدخل رابط API', 'warn'); return; }
+  state.workerName = name;
+  state.apiUrl = url;
+  saveLocal();
+  await gotoHome();
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  CYCLES
+// ══════════════════════════════════════════════════════════════════
+async function loadCycles() {
+  const icon = document.getElementById('refresh-icon');
+  if (icon) icon.textContent = '⏳';
+  try {
+    const res = await fetch(`${state.apiUrl}?mode=cycles`, { redirect: 'follow' });
+    const data = await res.json();
+    // Expected: { active: [...], all: [...] }
+    state.availableCycles = data.all || data.cycles || [];
+    // active can be single object or array
+    const active = data.active;
+    if (Array.isArray(active) && active.length > 0) {
+      state.activeCycle = active[0];
+      state.availableCycles = active; // use active list for picker
+    } else if (active && !Array.isArray(active)) {
+      state.activeCycle = active;
+    } else {
+      state.activeCycle = null;
+    }
+  } catch (e) {
+    // Keep whatever we had; don't crash
+  }
+  renderCycleBanner();
+  if (icon) icon.textContent = '🔄';
+}
+
+function renderCycleBanner() {
+  const el = document.getElementById('cycle-banner');
+  if (!el) return;
+
+  if (!state.activeCycle) {
+    el.innerHTML = `
+      <div class="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3">
+        <span class="text-2xl">⚠️</span>
+        <div>
+          <div class="font-bold text-red-700 text-sm">لا توجد دورة نشطة</div>
+          <div class="text-xs text-red-500 mt-0.5">اطلب من المالك تفعيل دورة</div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const actives = state.availableCycles.filter(c => c.status === 'active' || state.availableCycles.length <= 1);
+  const multiActive = actives.length > 1;
+
+  if (multiActive) {
+    const options = actives.map(c =>
+      `<option value="${c.id}" ${c.id === state.activeCycle.id ? 'selected' : ''}>${c.id} — ${c.name || ''}</option>`
+    ).join('');
+    el.innerHTML = `
+      <div class="bg-green-50 border border-green-200 rounded-2xl p-4">
+        <div class="text-xs font-semibold text-green-600 mb-2">الدورة الحالية</div>
+        <select onchange="pickCycle(this.value)" class="w-full border border-green-300 rounded-xl px-3 py-2 text-sm text-green-800 bg-white focus:outline-none focus:ring-2 focus:ring-green-500">
+          ${options}
+        </select>
+      </div>`;
+  } else {
+    el.innerHTML = `
+      <div class="bg-green-50 border border-green-200 rounded-2xl p-4 flex items-center gap-3">
+        <span class="text-2xl">🟢</span>
+        <div>
+          <div class="text-xs text-green-600 font-semibold">الدورة النشطة</div>
+          <div class="font-bold text-green-800">${state.activeCycle.name || state.activeCycle.id}</div>
+          <div class="text-xs text-green-500">${state.activeCycle.id}</div>
+        </div>
+      </div>`;
+  }
+}
+
+function pickCycle(id) {
+  const found = state.availableCycles.find(c => c.id === id);
+  if (found) { state.activeCycle = found; showToast(`تم اختيار: ${found.name || id}`, 'success'); }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  HOME SCREEN
+// ══════════════════════════════════════════════════════════════════
+async function gotoHome() {
+  document.getElementById('home-worker-tag').textContent = state.workerName || 'عامل النمو';
+  renderPhaseGrid();
+  showScreen('screen-home');
+  await loadCycles();
+}
+
+function renderPhaseGrid() {
+  const grid = document.getElementById('phase-grid');
+  grid.innerHTML = '';
+  Object.entries(PHASES).forEach(([key, meta]) => {
+    const c = COLOR[meta.color] || COLOR.gray;
+    const card = document.createElement('button');
+    card.className = `card-hover ${c.bg} ${c.border} border rounded-2xl p-4 text-right flex flex-col gap-2 active:scale-95 transition`;
+    card.onclick = () => openChecklist(key);
+    card.innerHTML = `
+      <span class="text-3xl">${meta.icon}</span>
+      <div class="font-bold ${c.text} text-sm leading-tight">${meta.label}</div>
+      <div class="text-xs ${c.text} opacity-60">${key}</div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  CHECKLIST
+// ══════════════════════════════════════════════════════════════════
+function openChecklist(key) {
+  if (!state.activeCycle) {
+    showToast('اطلب من المالك تفعيل دورة', 'warn');
+    return;
+  }
+  state.activeChecklist = key;
+  const meta = PHASES[key];
+  document.getElementById('checklist-title').textContent = `${meta.icon} ${meta.label}`;
+  document.getElementById('checklist-cycle-tag').textContent = `دورة: ${state.activeCycle.name || state.activeCycle.id}`;
+  renderChecklistBody(key);
+  showScreen('screen-checklist');
+}
+
+function renderChecklistBody(key) {
+  const body = document.getElementById('checklist-body');
+  body.innerHTML = '';
+  const checklist = CHECKLISTS[key];
+  if (!checklist) return;
+
+  const meta = PHASES[key];
+  const c = COLOR[meta.color] || COLOR.gray;
+
+  checklist.sections.forEach(section => {
+    const div = document.createElement('div');
+    div.className = 'bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden fade-in';
+
+    let fieldsHtml = '';
+    section.fields.forEach(field => {
+      fieldsHtml += renderField(field);
+    });
+
+    div.innerHTML = `
+      <div class="section-header px-4 py-3">
+        <h3 class="text-white font-bold text-sm">${section.title}</h3>
+      </div>
+      <div class="p-4 space-y-4">${fieldsHtml}</div>
+    `;
+    body.appendChild(div);
+  });
+}
+
+function renderField(field) {
+  const req = field.required ? '<span class="text-red-500">*</span>' : '';
+  const label = `<label class="block text-sm font-medium text-gray-700 mb-1.5">${field.label} ${req}</label>`;
+
+  if (field.type === 'textarea') {
+    return `<div>${label}<textarea name="${field.key}" rows="3" placeholder="${field.label}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"></textarea></div>`;
+  }
+
+  if (field.type === 'select') {
+    const opts = (field.options || []).map(o => `<option value="${o}">${o}</option>`).join('');
+    return `<div>${label}<select name="${field.key}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"><option value="">— اختر —</option>${opts}</select></div>`;
+  }
+
+  // number / text
+  const attrs = [
+    field.step ? `step="${field.step}"` : '',
+    field.min !== undefined ? `min="${field.min}"` : '',
+    field.max !== undefined ? `max="${field.max}"` : ''
+  ].filter(Boolean).join(' ');
+
+  return `<div>${label}<input name="${field.key}" type="${field.type}" ${attrs} placeholder="${field.label}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" /></div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SUBMIT
+// ══════════════════════════════════════════════════════════════════
+async function submitChecklist() {
+  if (!state.activeCycle) { showToast('لا توجد دورة نشطة', 'error'); return; }
+  const key = state.activeChecklist;
+  if (!key) return;
+
+  // Collect fields
+  const checklistEl = document.getElementById('checklist-body');
+  const inputs = checklistEl.querySelectorAll('input, textarea, select');
+  const collectedFields = {};
+  let missingRequired = false;
+
+  inputs.forEach(inp => {
+    if (!inp.name) return;
+    const val = inp.value.trim();
+    // Check required
+    const isReq = inp.closest('div')?.querySelector('span.text-red-500');
+    if (isReq && !val) missingRequired = true;
+    if (val !== '') collectedFields[inp.name] = val;
+  });
+
+  if (missingRequired) { showToast('يرجى تعبئة الحقول الإلزامية *', 'warn'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ جاري الإرسال…';
+
+  try {
+    const payload = {
+      type: key,
+      cycle_id: state.activeCycle.id,
+      worker: state.workerName,
+      schema_version: CHECKLISTS_VERSION,
+      timestamp: new Date().toISOString(),
+      fields: collectedFields
+    };
+
+    const body = new URLSearchParams();
+    body.append('payload', JSON.stringify(payload));
+    body.append('mode', 'submit');
+
+    const res = await fetch(state.apiUrl, { method: 'POST', body, redirect: 'follow' });
+    const txt = await res.text();
+
+    // Try to parse; if it has "error" fail
+    let parsed = null;
+    try { parsed = JSON.parse(txt); } catch (e) { /* raw text OK */ }
+    if (parsed && parsed.error) throw new Error(parsed.error);
+
+    // Success
+    const meta = PHASES[key];
+    document.getElementById('ok-message').textContent =
+      `تم حفظ قراءة "${meta.label}" للدورة ${state.activeCycle.name || state.activeCycle.id} — ${new Date().toLocaleTimeString('ar')}`;
+    showScreen('screen-submit-ok');
+
+  } catch (e) {
+    showToast(`خطأ في الإرسال: ${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 حفظ القراءة';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════════════════════════
+function goHome() {
+  showScreen('screen-home');
+}
+
+function submitAnother() {
+  if (state.activeChecklist) openChecklist(state.activeChecklist);
+  else showScreen('screen-home');
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════════
+async function init() {
+  // 1. Load from localStorage
+  loadLocal();
+
+  // 2. Auto-fill from config.js
+  if (window.FARM_CONFIG && window.FARM_CONFIG.GROWING_URL !== 'PASTE_YOUR_GROWING_EXEC_URL_HERE') {
+    if (!state.apiUrl) state.apiUrl = window.FARM_CONFIG.GROWING_URL;
+  }
+
+  // 3. If we have everything, skip setup screen
+  if (state.workerName && state.apiUrl) {
+    await gotoHome();
+  } else {
+    // Pre-fill setup fields if we have partial data
+    if (state.apiUrl) document.getElementById('setup-api-url').value = state.apiUrl;
+    if (state.workerName) document.getElementById('setup-worker-name').value = state.workerName;
+    showScreen('screen-setup');
+  }
+}
+
+// Boot
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

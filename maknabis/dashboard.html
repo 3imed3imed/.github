@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MAKNABIS — لوحة المراقبة</title>
+<script src="config.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  * { font-family: 'Tajawal', sans-serif; box-sizing: border-box; }
+  body { background: #f0fdf4; margin: 0; }
+  .topbar { background: #14532d; color: white; padding: 0.75rem 1.5rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .kpi-card { background: white; border-radius: 12px; padding: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+  .kpi-value { font-size: 1.8rem; font-weight: 800; color: #14532d; }
+  .kpi-label { font-size: 0.85rem; color: #6b7280; margin-top: 2px; }
+  .section-title { font-size: 1rem; font-weight: 700; color: #1f2937; margin-bottom: 0.75rem; }
+  .card { background: white; border-radius: 14px; padding: 1.25rem; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 1rem; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; }
+  .badge-cyan { background: #e0f7fa; color: #006064; }
+  .badge-green { background: #dcfce7; color: #14532d; }
+  .badge-red { background: #fee2e2; color: #991b1b; }
+  .badge-amber { background: #fef3c7; color: #92400e; }
+  .reading-ok { background: #dcfce7; color: #166534; border-radius: 8px; padding: 0.5rem 0.75rem; }
+  .reading-warn { background: #fef3c7; color: #92400e; border-radius: 8px; padding: 0.5rem 0.75rem; }
+  .reading-crit { background: #fee2e2; color: #991b1b; border-radius: 8px; padding: 0.5rem 0.75rem; }
+  .alert-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 8px; margin-bottom: 0.4rem; background: #fef3c7; font-size: 0.85rem; }
+  .wave-row { display: flex; justify-content: space-between; padding: 0.4rem 0; border-bottom: 1px solid #f3f4f6; font-size: 0.85rem; }
+  #settings-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center; }
+  #settings-modal.open { display: flex; }
+  .modal-box { background: white; border-radius: 16px; padding: 1.5rem; width: 90%; max-width: 420px; }
+  .inp { width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 0.6rem 0.75rem; font-family: Tajawal; font-size: 0.9rem; }
+  .btn-primary { background: #16a34a; color: white; border: none; border-radius: 8px; padding: 0.6rem 1.2rem; font-family: Tajawal; cursor: pointer; font-weight: 600; }
+  .btn-secondary { background: #e5e7eb; color: #374151; border: none; border-radius: 8px; padding: 0.6rem 1.2rem; font-family: Tajawal; cursor: pointer; }
+  .worker-badge { display: inline-flex; align-items: center; gap: 6px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 20px; padding: 4px 12px; font-size: 0.82rem; }
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .connect-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .connect-card { background: white; border-radius: 20px; padding: 2.5rem; width: 90%; max-width: 420px; box-shadow: 0 4px 24px rgba(0,0,0,0.1); text-align: center; }
+  select.inp { appearance: none; }
+  canvas { max-width: 100%; }
+</style>
+</head>
+<body>
+
+<!-- Connect Screen -->
+<div id="connect-screen" class="connect-screen">
+  <div class="connect-card">
+    <div style="font-size:3rem; margin-bottom:0.5rem;">🍄</div>
+    <h1 style="font-size:1.8rem; font-weight:800; color:#14532d; margin:0 0 0.5rem;">MAKNABIS</h1>
+    <p style="color:#6b7280; font-size:0.9rem; margin-bottom:1.5rem;">لوحة المراقبة — أدخل بيانات الاتصال</p>
+    <div style="text-align:right; margin-bottom:1rem;">
+      <label style="font-size:0.85rem; color:#374151; font-weight:600;">رابط API (Apps Script)</label>
+      <input id="c-url" class="inp" style="margin-top:4px;" placeholder="https://script.google.com/...">
+    </div>
+    <div style="text-align:right; margin-bottom:1rem;">
+      <label style="font-size:0.85rem; color:#374151; font-weight:600;">مفتاح لوحة القيادة</label>
+      <input id="c-key" class="inp" style="margin-top:4px;" placeholder="FARM2026">
+    </div>
+    <div style="text-align:right; margin-bottom:1.5rem;">
+      <label style="font-size:0.85rem; color:#374151; font-weight:600;">التحديث التلقائي (ثانية)</label>
+      <select id="c-interval" class="inp" style="margin-top:4px;">
+        <option value="15">15 ثانية</option>
+        <option value="30" selected>30 ثانية</option>
+        <option value="60">دقيقة</option>
+        <option value="120">دقيقتان</option>
+      </select>
+    </div>
+    <button class="btn-primary" style="width:100%;" onclick="connect()">دخول →</button>
+  </div>
+</div>
+
+<!-- Main Dashboard -->
+<div id="main-dash" style="display:none;">
+  <!-- Topbar -->
+  <div class="topbar">
+    <div style="display:flex; align-items:center; gap:0.75rem;">
+      <span style="font-size:1.4rem;">🍄</span>
+      <span style="font-weight:800; font-size:1.1rem;">MAKNABIS</span>
+      <span style="font-size:0.8rem; opacity:0.7;">لوحة المراقبة</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:0.75rem;">
+      <span id="cycle-badge" class="badge badge-cyan"></span>
+      <span id="last-update" style="font-size:0.75rem; opacity:0.7;"></span>
+      <button onclick="refresh()" style="background:rgba(255,255,255,0.15); border:none; color:white; border-radius:8px; padding:6px 12px; cursor:pointer; font-family:Tajawal; display:flex; align-items:center; gap:4px;">
+        <span id="refresh-icon">↻</span> تحديث
+      </button>
+      <button onclick="document.getElementById('settings-modal').classList.add('open')" style="background:rgba(255,255,255,0.15); border:none; color:white; border-radius:8px; padding:6px 10px; cursor:pointer;">⚙️</button>
+    </div>
+  </div>
+
+  <!-- Cycle Filter -->
+  <div style="background:white; border-bottom:1px solid #e5e7eb; padding:0.6rem 1.5rem; display:flex; align-items:center; gap:1rem;">
+    <label style="font-size:0.85rem; color:#6b7280; font-weight:600;">الدورة:</label>
+    <select id="cycle-filter" class="inp" style="width:auto; min-width:200px; padding:4px 10px;" onchange="onCycleChange()">
+      <option value="">📊 كل الدورات</option>
+    </select>
+    <span id="stage-label-bar" class="badge badge-green"></span>
+  </div>
+
+  <div style="padding:1.25rem; max-width:1400px; margin:0 auto;">
+
+    <!-- KPI Row -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:0.75rem; margin-bottom:1.25rem;" id="kpi-row">
+      <div class="kpi-card"><div class="kpi-value" id="k-day">—</div><div class="kpi-label">يوم الدورة</div></div>
+      <div class="kpi-card"><div class="kpi-value" id="k-stage" style="font-size:1rem;">—</div><div class="kpi-label">المرحلة</div></div>
+      <div class="kpi-card"><div class="kpi-value" id="k-today">—</div><div class="kpi-label">حصاد اليوم كغ</div></div>
+      <div class="kpi-card"><div class="kpi-value" id="k-total">—</div><div class="kpi-label">إجمالي الحصاد كغ</div></div>
+      <div class="kpi-card"><div class="kpi-value" id="k-bags">—</div><div class="kpi-label">الأكياس</div></div>
+      <div class="kpi-card"><div class="kpi-value" id="k-alerts" style="color:#dc2626;">—</div><div class="kpi-label">تنبيهات</div></div>
+    </div>
+
+    <!-- Charts Row -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+      <div class="card">
+        <div class="section-title">🍄 الحصاد — آخر 14 يوم</div>
+        <canvas id="harvest-chart" height="200"></canvas>
+      </div>
+      <div class="card">
+        <div class="section-title">🌡️ درجة الحرارة (صباح / ظهر / مساء)</div>
+        <canvas id="temp-chart" height="200"></canvas>
+      </div>
+    </div>
+
+    <!-- Reading + Alerts Row -->
+    <div style="display:grid; grid-template-columns:2fr 1fr; gap:1rem; margin-bottom:1rem;">
+      <!-- Latest Reading -->
+      <div class="card">
+        <div class="section-title">📡 آخر قراءة</div>
+        <div id="latest-reading" style="display:grid; grid-template-columns:repeat(3,1fr); gap:0.75rem;">
+          <div style="text-align:center; color:#9ca3af; padding:1rem;">لا توجد قراءات</div>
+        </div>
+      </div>
+      <!-- Alerts -->
+      <div class="card">
+        <div class="section-title">🚨 التنبيهات الأخيرة</div>
+        <div id="alerts-list"><div style="color:#9ca3af; font-size:0.85rem; text-align:center; padding:1rem;">لا توجد تنبيهات</div></div>
+      </div>
+    </div>
+
+    <!-- Waves + Workers Row -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+      <!-- Waves -->
+      <div class="card">
+        <div class="section-title">🌊 موجات الحصاد</div>
+        <div id="waves-table"><div style="color:#9ca3af; font-size:0.85rem; text-align:center; padding:1rem;">لا توجد بيانات</div></div>
+      </div>
+      <!-- Workers -->
+      <div class="card">
+        <div class="section-title">👷 نشاط العمال</div>
+        <div id="workers-list" style="display:flex; flex-wrap:wrap; gap:0.5rem;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-modal">
+  <div class="modal-box">
+    <h3 style="margin:0 0 1rem; font-weight:700;">⚙️ الإعدادات</h3>
+    <div style="margin-bottom:0.75rem;">
+      <label style="font-size:0.85rem; font-weight:600;">رابط API</label>
+      <input id="s-url" class="inp" style="margin-top:4px;">
+    </div>
+    <div style="margin-bottom:0.75rem;">
+      <label style="font-size:0.85rem; font-weight:600;">مفتاح لوحة القيادة</label>
+      <input id="s-key" class="inp" style="margin-top:4px;">
+    </div>
+    <div style="margin-bottom:0.75rem;">
+      <label style="font-size:0.85rem; font-weight:600;">تصفية الدورة</label>
+      <select id="s-cycle" class="inp" style="margin-top:4px;">
+        <option value="">كل الدورات</option>
+      </select>
+    </div>
+    <div style="margin-bottom:1rem;">
+      <label style="font-size:0.85rem; font-weight:600;">فترة التحديث</label>
+      <select id="s-interval" class="inp" style="margin-top:4px;">
+        <option value="15">15 ثانية</option>
+        <option value="30">30 ثانية</option>
+        <option value="60">دقيقة</option>
+        <option value="120">دقيقتان</option>
+      </select>
+    </div>
+    <div style="display:flex; gap:0.5rem;">
+      <button class="btn-primary" onclick="saveSettings()">حفظ</button>
+      <button class="btn-secondary" onclick="testConn()">🔍 اختبار</button>
+      <button class="btn-secondary" onclick="document.getElementById('settings-modal').classList.remove('open')">إلغاء</button>
+    </div>
+    <div id="test-result" style="margin-top:0.75rem; font-size:0.85rem;"></div>
+  </div>
+</div>
+
+<script>
+const cfg = {
+  url: localStorage.getItem('dash_url') || '',
+  key: localStorage.getItem('dash_key') || 'FARM2026',
+  interval: parseInt(localStorage.getItem('dash_interval') || '30'),
+  cycleId: localStorage.getItem('dash_cycle') || ''
+};
+let refreshTimer = null;
+let harvestChart = null, tempChart = null;
+
+// Auto-fill from config.js
+if (window.FARM_CONFIG && window.FARM_CONFIG.GROWING_URL && window.FARM_CONFIG.GROWING_URL !== 'PASTE_YOUR_GROWING_EXEC_URL_HERE') {
+  if (!cfg.url) cfg.url = window.FARM_CONFIG.GROWING_URL;
+  if (!cfg.key || cfg.key === 'FARM2026') cfg.key = window.FARM_CONFIG.DASHBOARD_KEY || 'FARM2026';
+}
+
+function init() {
+  if (cfg.url) {
+    document.getElementById('connect-screen').style.display = 'none';
+    document.getElementById('main-dash').style.display = 'block';
+    refresh();
+    startTimer();
+  } else {
+    document.getElementById('c-url').value = cfg.url;
+    document.getElementById('c-key').value = cfg.key;
+    document.getElementById('c-interval').value = cfg.interval;
+  }
+}
+
+function connect() {
+  cfg.url = document.getElementById('c-url').value.trim();
+  cfg.key = document.getElementById('c-key').value.trim() || 'FARM2026';
+  cfg.interval = parseInt(document.getElementById('c-interval').value);
+  save();
+  document.getElementById('connect-screen').style.display = 'none';
+  document.getElementById('main-dash').style.display = 'block';
+  refresh();
+  startTimer();
+}
+
+function save() {
+  localStorage.setItem('dash_url', cfg.url);
+  localStorage.setItem('dash_key', cfg.key);
+  localStorage.setItem('dash_interval', cfg.interval);
+  localStorage.setItem('dash_cycle', cfg.cycleId);
+}
+
+function startTimer() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(refresh, cfg.interval * 1000);
+}
+
+function onCycleChange() {
+  cfg.cycleId = document.getElementById('cycle-filter').value;
+  save();
+  refresh();
+}
+
+async function refresh() {
+  const icon = document.getElementById('refresh-icon');
+  icon.textContent = '⏳';
+  try {
+    const params = new URLSearchParams({ mode: 'dashboard', key: cfg.key });
+    if (cfg.cycleId) params.set('cycle_id', cfg.cycleId);
+    const resp = await fetch(cfg.url + '?' + params);
+    const data = await resp.json();
+    if (data.ok) render(data);
+  } catch(e) {
+    console.error(e);
+  } finally {
+    icon.textContent = '↻';
+    document.getElementById('last-update').textContent = 'آخر تحديث: ' + new Date().toLocaleTimeString('ar-TN');
+  }
+}
+
+function render(data) {
+  // KPIs
+  document.getElementById('k-day').textContent = data.day_number || '—';
+  document.getElementById('k-stage').textContent = data.stage_label || data.stage_id || '—';
+  document.getElementById('k-today').textContent = (data.harvest_today != null ? data.harvest_today : '—');
+  document.getElementById('k-total').textContent = (data.harvest_total != null ? data.harvest_total : (data.kpis && data.kpis.total_harvest != null ? data.kpis.total_harvest : '—'));
+  document.getElementById('k-bags').textContent = (data.cycle && data.cycle.bag_count) ? data.cycle.bag_count : '—';
+  const alertCount = (data.alerts || []).length + (data.emergency_count || 0);
+  document.getElementById('k-alerts').textContent = alertCount;
+
+  // Cycle badge
+  if (data.cycle) {
+    document.getElementById('cycle-badge').textContent = data.cycle.id + ' · ' + (data.cycle.name || '');
+    document.getElementById('stage-label-bar').textContent = data.stage_label || '';
+  }
+
+  // Populate cycle filter
+  if (data.cycles && data.cycles.length) {
+    const sel = document.getElementById('cycle-filter');
+    const existing = Array.from(sel.options).map(o => o.value);
+    data.cycles.forEach(c => {
+      if (!existing.includes(c.id)) {
+        const opt = document.createElement('option');
+        opt.value = c.id; opt.textContent = c.id + ' — ' + (c.name || '');
+        sel.appendChild(opt);
+      }
+    });
+    sel.value = cfg.cycleId || '';
+    // Mirror to settings modal
+    const ssel = document.getElementById('s-cycle');
+    ssel.innerHTML = '<option value="">كل الدورات</option>';
+    data.cycles.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id; opt.textContent = c.id + ' — ' + (c.name || '');
+      ssel.appendChild(opt);
+    });
+    ssel.value = cfg.cycleId || '';
+  }
+
+  // Latest Reading
+  if (data.latest_reading) {
+    renderLatestReading(data.latest_reading, data.targets);
+  }
+
+  // Alerts
+  renderAlerts(data.alerts || []);
+
+  // Waves
+  renderWaves(data.waves || []);
+
+  // Workers
+  renderWorkers(data.worker_activity || {});
+
+  // Charts
+  renderHarvestChart(data.harvest_series || []);
+  renderTempChart(data.env_series || []);
+}
+
+function renderLatestReading(lr, targets) {
+  const sessions = [
+    { key: 'morning', label: '☀️ الصباح 06:00', color: '#fef3c7' },
+    { key: 'noon', label: '🌤️ الظهر 14:00', color: '#fed7aa' },
+    { key: 'evening', label: '🌙 المساء 20:00', color: '#e0e7ff' }
+  ];
+  const fields = [
+    { k: 'air_temp', label: 'حرارة الهواء', unit: '°C', target: targets && targets.air_temp },
+    { k: 'compost_temp', label: 'حرارة الكمبوست', unit: '°C', target: null },
+    { k: 'humidity', label: 'الرطوبة', unit: '%', target: targets && targets.humidity },
+    { k: 'co2', label: 'CO₂', unit: 'ppm', target: targets && targets.co2 }
+  ];
+  const container = document.getElementById('latest-reading');
+  container.innerHTML = '';
+  sessions.forEach(s => {
+    const reading = lr[s.key];
+    if (!reading) return;
+    const div = document.createElement('div');
+    div.style.background = s.color;
+    div.style.borderRadius = '10px';
+    div.style.padding = '0.75rem';
+    let html = `<div style="font-weight:700; font-size:0.85rem; margin-bottom:0.5rem;">${s.label}</div>`;
+    fields.forEach(f => {
+      const v = reading[f.k];
+      if (v == null) return;
+      const ok = !f.target || (v >= f.target[0] && v <= f.target[1]);
+      html += `<div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:3px;">
+        <span style="color:#6b7280;">${f.label}</span>
+        <span style="font-weight:700; color:${ok ? '#16a34a' : '#dc2626'};">${v}${f.unit}</span>
+      </div>`;
+    });
+    div.innerHTML = html;
+    container.appendChild(div);
+  });
+}
+
+function renderAlerts(alerts) {
+  const el = document.getElementById('alerts-list');
+  if (!alerts.length) { el.innerHTML = '<div style="color:#9ca3af; font-size:0.85rem; text-align:center; padding:1rem;">✅ لا توجد تنبيهات</div>'; return; }
+  el.innerHTML = alerts.slice(0, 10).map(a => `
+    <div class="alert-item">
+      <span>⚠️</span>
+      <div style="flex:1">
+        <div style="font-weight:600;">${a.field || ''}: ${a.value || ''}</div>
+        <div style="color:#9ca3af; font-size:0.75rem;">${a.date || ''} — الهدف: ${Array.isArray(a.target) ? a.target.join('–') : a.target || ''}</div>
+      </div>
+    </div>`).join('');
+}
+
+function renderWaves(waves) {
+  const el = document.getElementById('waves-table');
+  if (!waves.length) { el.innerHTML = '<div style="color:#9ca3af; font-size:0.85rem; text-align:center; padding:1rem;">لا توجد موجات</div>'; return; }
+  el.innerHTML = `<div class="wave-row" style="font-weight:700; font-size:0.8rem;"><span>الموجة</span><span>التاريخ</span><span>الكمية كغ</span></div>` +
+    waves.map(w => `<div class="wave-row"><span class="badge badge-green">${w.wave || '—'}</span><span>${w.start_date || '—'}</span><span style="font-weight:700;">${w.total_kg || 0}</span></div>`).join('');
+}
+
+function renderWorkers(activity) {
+  const el = document.getElementById('workers-list');
+  el.innerHTML = Object.entries(activity).map(([name, count]) =>
+    `<div class="worker-badge">👷 <strong>${name}</strong> <span style="background:#dcfce7; color:#166534; border-radius:20px; padding:2px 8px;">${count}</span></div>`
+  ).join('') || '<div style="color:#9ca3af; font-size:0.85rem;">لا توجد بيانات</div>';
+}
+
+function renderHarvestChart(series) {
+  const ctx = document.getElementById('harvest-chart').getContext('2d');
+  if (harvestChart) harvestChart.destroy();
+  const labels = series.map(s => s.date || '');
+  const data = series.map(s => s.kg || 0);
+  harvestChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'كغ', data, backgroundColor: '#16a34a', borderRadius: 6 }] },
+    options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { family: 'Tajawal', size: 11 } } }, y: { ticks: { font: { family: 'Tajawal', size: 11 } } } }, responsive: true }
+  });
+}
+
+function renderTempChart(series) {
+  const ctx = document.getElementById('temp-chart').getContext('2d');
+  if (tempChart) tempChart.destroy();
+  if (!series.length) return;
+  const labels = series.map(s => s.date || '');
+  tempChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: '☀️ صباح', data: series.map(s => s.morning && s.morning.air_temp), borderColor: '#f59e0b', tension: 0.3, fill: false, pointRadius: 3 },
+        { label: '🌤️ ظهر',  data: series.map(s => s.noon && s.noon.air_temp),    borderColor: '#f97316', tension: 0.3, fill: false, pointRadius: 3 },
+        { label: '🌙 مساء', data: series.map(s => s.evening && s.evening.air_temp), borderColor: '#7c3aed', tension: 0.3, fill: false, pointRadius: 3 }
+      ]
+    },
+    options: { plugins: { legend: { labels: { font: { family: 'Tajawal', size: 11 } } } }, scales: { x: { ticks: { font: { family: 'Tajawal', size: 11 } } }, y: { ticks: { font: { family: 'Tajawal', size: 11 } } } }, responsive: true }
+  });
+}
+
+function saveSettings() {
+  cfg.url = document.getElementById('s-url').value.trim();
+  cfg.key = document.getElementById('s-key').value.trim();
+  cfg.cycleId = document.getElementById('s-cycle').value;
+  cfg.interval = parseInt(document.getElementById('s-interval').value);
+  save();
+  startTimer();
+  document.getElementById('settings-modal').classList.remove('open');
+  refresh();
+}
+
+async function testConn() {
+  const url = document.getElementById('s-url').value.trim();
+  const key = document.getElementById('s-key').value.trim();
+  const el = document.getElementById('test-result');
+  el.textContent = '⏳ جاري الاختبار...';
+  try {
+    const resp = await fetch(url + '?ping=1');
+    const d = await resp.json();
+    el.innerHTML = d.ok ? '✅ متصل — الإصدار ' + (d.version || '') : '❌ خطأ: ' + (d.error || 'استجابة غير صحيحة');
+  } catch(e) { el.textContent = '❌ فشل الاتصال: ' + e.message; }
+}
+
+// Pre-fill settings modal
+document.getElementById('s-url').value = cfg.url;
+document.getElementById('s-key').value = cfg.key;
+document.getElementById('s-interval').value = cfg.interval;
+
+init();
+</script>
+</body>
+</html>
