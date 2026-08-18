@@ -7,6 +7,7 @@ deterministic scorer is the default and the test oracle.
 
 from __future__ import annotations
 
+import json
 import re
 
 from app.config import Settings, get_settings
@@ -20,15 +21,62 @@ _INVEST = re.compile(r"\b(dna|forensic|investigat|detective|genealogy|evidence|b
 _ENDING = re.compile(r"\b(finally|decades later|years later|closure|resolved|verdict)\b", re.I)
 _VISUAL = re.compile(r"\b(heist|escape|robbery|chase|bank|museum|vault|border|map|location)\b", re.I)
 
+# Coarse story categories used to connect analytics performance back to
+# selection. Keep this vocabulary aligned with the `category` field written in
+# performance data so the feedback loop matches.
+_CATEGORY_PATTERNS = [
+    ("cold_case", re.compile(r"\bcold case\b|\bunsolved\b|\bdecades? later\b|\byears later\b", re.I)),
+    ("heist", re.compile(r"\bheist\b|\brobbery\b|\bburglary\b|\bmuseum\b|\bvault\b", re.I)),
+    ("fraud", re.compile(r"\bfraud\b|\bscam\b|\bponzi\b|\bembezzl", re.I)),
+    ("fugitive", re.compile(r"\bfugitive\b|\bmanhunt\b|\bescape\b|\bcaptured\b", re.I)),
+    ("missing_person", re.compile(r"\bmissing\b|\bvanished\b|\bdisappear", re.I)),
+    ("homicide", re.compile(r"\bmurder\b|\bhomicide\b|\bkilling\b", re.I)),
+]
+
+#: Advisory bias is deliberately small — analytics only nudges soft selection,
+#: it never overrides the rubric, thresholds, niche policy or safety rules.
+_ADVISORY_MAX_POINTS = 3
+
+
+def category_for(candidate: Candidate) -> str:
+    text = f"{candidate.crime_type} {candidate.headline} {candidate.summary}"
+    for name, pat in _CATEGORY_PATTERNS:
+        if pat.search(text):
+            return name
+    return "other"
+
 
 class StoryRanker:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or get_settings()
         self.niche = NicheFilter()
+        self._advisory = self._load_advisory_weights()
+
+    def _load_advisory_weights(self) -> dict[str, float]:
+        """Load per-category advisory weights produced by weekly analytics.
+
+        Returns an empty dict when none exist. These bias *soft* selection only.
+        """
+        path = self.settings.data_dir / "selection_weights.json"
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+        weights: dict[str, float] = {}
+        for rec in data.get("recommendations", []):
+            if rec.get("dimension") == "category":
+                try:
+                    weights[str(rec["signal"])] = float(rec["weight_delta"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+        return weights
 
     def rank(self, candidate: Candidate) -> RankedStory:
         verdict = self.niche.evaluate(candidate)
         if not verdict.allowed:
+            # Safety rejection is absolute — advisory weights can never revive it.
             return RankedStory(
                 candidate=candidate,
                 score=0,
@@ -37,14 +85,24 @@ class StoryRanker:
                 explanation=verdict.reason,
             )
         breakdown = self._score(candidate, verdict)
-        total = min(100, max(0, breakdown.total() + verdict.priority_bonus))
+        base = min(100, max(0, breakdown.total() + verdict.priority_bonus))
+        bias = self._advisory_bias(candidate)
+        total = min(100, max(0, base + bias))
         story = RankedStory(
             candidate=candidate,
             score=total,
             breakdown=breakdown,
-            explanation=self._explain(candidate, breakdown, verdict, total),
+            explanation=self._explain(candidate, breakdown, verdict, total, bias=bias),
         )
         return story
+
+    def _advisory_bias(self, candidate: Candidate) -> int:
+        if not self._advisory:
+            return 0
+        delta = self._advisory.get(category_for(candidate), 0.0)
+        # weight_delta is a small fraction; scale to a bounded point bias.
+        points = round(delta * 10)
+        return max(-_ADVISORY_MAX_POINTS, min(_ADVISORY_MAX_POINTS, points))
 
     def rank_all(self, candidates: list[Candidate]) -> list[RankedStory]:
         ranked = [self.rank(c) for c in candidates]
@@ -96,14 +154,21 @@ class StoryRanker:
         b.originality = 2
         return b
 
-    def _explain(self, c: Candidate, b: ScoreBreakdown, v: NicheVerdict, total: int) -> str:
+    def _explain(self, c: Candidate, b: ScoreBreakdown, v: NicheVerdict, total: int, *, bias: int = 0) -> str:
         parts = [
-            f"Total {total}/100 (rubric {b.total()} + niche bonus {v.priority_bonus}).",
+            f"Total {total}/100 (rubric {b.total()} + niche bonus {v.priority_bonus}"
+            + (f" + analytics bias {bias:+d}" if bias else "")
+            + ").",
             f"Solved/outcome {b.solved_outcome}/20, mystery {b.mystery}/15, twist {b.twist}/15,"
             f" ending {b.clear_ending}/10, investigation {b.investigation}/10,"
             f" source {b.source_quality}/10, visual {b.visual_potential}/8,"
             f" evergreen {b.evergreen}/5, adv-safe {b.advertiser_safety}/5, original {b.originality}/2.",
         ]
+        if bias:
+            parts.append(
+                f"Analytics advisory ({category_for(c)}): {bias:+d} pts (soft nudge only; "
+                "safety/fact rules unchanged)."
+            )
         if v.matched:
             parts.append("Niche signals: " + ", ".join(v.matched))
         thr = self.settings.scoring

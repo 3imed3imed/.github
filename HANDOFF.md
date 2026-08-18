@@ -57,8 +57,11 @@ pipeline stages, state/dedupe/secret-redaction, provider-failure/secret-scan,
   fully without it.
 - **Discovery feeds** depend on third-party RSS/JSON endpoints that occasionally
   change or rate-limit; each source fails soft.
-- **Analytics** needs real performance data (YouTube Analytics wiring is an
-  explicit integration point) before recommendations are meaningful.
+- **Analytics feedback loop is wired** — weekly analytics writes advisory
+  per-category weights that the ranker applies as a small, bounded (±3 pt) soft
+  bias (never overriding safety/fact rules or reviving rejected stories). It
+  still needs real YouTube Analytics performance data (an explicit integration
+  point in `AnalyticsEngine._collect_live`) before the weights are meaningful.
 - No music/ambience bed ships (licensing); drop a `bed.wav` per project to enable
   the ducking mix.
 

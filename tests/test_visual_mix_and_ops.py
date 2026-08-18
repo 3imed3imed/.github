@@ -138,6 +138,40 @@ def test_audio_stage_respects_music_bed_disabled(monkeypatch):
     reload_settings()
 
 
+def test_analytics_feeds_back_into_ranking(settings):
+    # Closes the loop: analytics weights bias future selection (bounded, soft).
+    import json
+
+    from app.ranking import StoryRanker, category_for
+    from tests import fixtures_data as fx
+
+    assert category_for(fx.FRAUD) == "fraud"
+    assert category_for(fx.SOLVED_COLD_CASE) == "cold_case"
+
+    baseline = StoryRanker(settings).rank(fx.FRAUD).score
+
+    settings.ensure_dirs()
+    weights = {
+        "recommendations": [
+            {"dimension": "category", "signal": "fraud", "weight_delta": 0.3},
+            {"dimension": "category", "signal": "cold_case", "weight_delta": -0.3},
+        ]
+    }
+    (settings.data_dir / "selection_weights.json").write_text(json.dumps(weights))
+
+    ranker = StoryRanker(settings)  # picks up weights at construction
+    boosted = ranker.rank(fx.FRAUD)
+    damped = ranker.rank(fx.SOLVED_COLD_CASE)
+    assert boosted.score > baseline  # fraud nudged up
+    assert boosted.score - baseline <= 3  # bounded advisory bias
+    assert "analytics bias" in boosted.explanation
+    # A hard-rejected story can NEVER be revived by analytics weights.
+    forbidden = ranker.rank(fx.FORBIDDEN)
+    assert forbidden.rejected and forbidden.score == 0
+    # Damping never pushes a score below zero or changes rejection.
+    assert damped.score >= 0 and not damped.rejected
+
+
 def test_cleanup_keeps_deliverables(settings):
     from app.cleanup import cleanup
     from app.storage import ProjectStore

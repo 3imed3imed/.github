@@ -6,6 +6,12 @@ category, and emits *weighting recommendations* for future story selection.
 
 Hard rule: analytics never changes core safety or fact rules — it only nudges
 soft selection weights.
+
+The produced ``selection_weights.json`` is consumed by :class:`app.ranking.StoryRanker`
+as a small, bounded per-category bias. For the loop to connect, the ``category``
+field in performance data must use the same vocabulary as
+``app.ranking.category_for`` (e.g. ``cold_case``, ``fraud``, ``heist``,
+``fugitive``, ``missing_person``, ``homicide``, ``other``).
 """
 
 from __future__ import annotations
