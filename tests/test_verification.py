@@ -43,11 +43,17 @@ def test_no_legal_status_escalation(settings):
     assert capped == ClaimStatus.CHARGED
 
 
-def test_bad_source_candidate_not_verified(settings):
+def test_bad_source_candidate_not_verified(settings, monkeypatch):
+    # Hermetic: disable the network legal lookup so this deterministically tests
+    # the single-source path (no corroboration => cannot reach MIN_SOURCES),
+    # regardless of whether the test host has outbound network.
+    monkeypatch.setattr(
+        "app.research.CourtListenerProvider.available", lambda self: False
+    )
     r = Researcher(settings)
     output, _ = r.build_fact_database(fx.BAD_SOURCE)
-    # Only one source could be collected offline -> not verified.
     assert not output.verified
+    assert "insufficient" in output.reason or "official" in output.reason
 
 
 def test_every_claim_has_a_source(settings):
