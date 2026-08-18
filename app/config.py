@@ -131,6 +131,11 @@ class Settings:
     tts_provider: str = field(default_factory=lambda: os.getenv("TTS_PROVIDER", "edge"))
     tts_voice: str = field(default_factory=lambda: os.getenv("TTS_VOICE", "en-US-ChristopherNeural"))
 
+    # Music/ambience bed: a subtle, procedurally-generated, license-clean pad,
+    # auto-ducked under narration. Disable with MUSIC_BED_ENABLED=false.
+    music_bed_enabled: bool = field(default_factory=lambda: _bool("MUSIC_BED_ENABLED", True))
+    target_lufs: float = field(default_factory=lambda: _float("TARGET_LUFS", -14.0))
+
     # YouTube OAuth (refresh token only — never a password).
     youtube_client_id: str | None = field(default_factory=lambda: os.getenv("YOUTUBE_CLIENT_ID"))
     youtube_client_secret: str | None = field(

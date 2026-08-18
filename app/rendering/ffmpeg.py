@@ -128,6 +128,41 @@ def mux_audio_video(video_path: Path, audio_path: Path, out_path: Path, *, targe
     )
 
 
+def generate_ambient_bed(out_path: Path, *, duration: float, sample_rate: int = 24000) -> None:
+    """Procedurally generate a subtle, license-clean ambient music bed.
+
+    We synthesise it ourselves (two very low, quiet sine drones plus heavily
+    low-passed noise), so it is copyright-clean and carries no sensational sound
+    (no screaming, gunshots or stingers — spec §18). It is quiet by design and is
+    further ducked under narration at mix time.
+    """
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    d = max(1.0, duration)
+    # Two soft detuned drones + gently filtered noise, summed and kept low.
+    filter_complex = (
+        f"sine=frequency=110:sample_rate={sample_rate}:duration={d:.2f}[a];"
+        f"sine=frequency=146.83:sample_rate={sample_rate}:duration={d:.2f}[b];"
+        f"anoisesrc=color=brown:sample_rate={sample_rate}:duration={d:.2f}:amplitude=0.2[n];"
+        "[a]volume=0.12[a2];[b]volume=0.09[b2];"
+        "[n]lowpass=f=500,volume=0.10[n2];"
+        "[a2][b2][n2]amix=inputs=3:normalize=0,"
+        "tremolo=f=0.1:d=0.3,"
+        "afade=t=in:st=0:d=2,"
+        f"afade=t=out:st={max(0.0, d - 2):.2f}:d=2,"
+        "volume=0.5[out]"
+    )
+    _run(
+        [
+            "-filter_complex", filter_complex,
+            "-map", "[out]",
+            "-ac", "1", "-ar", str(sample_rate),
+            "-t", f"{d:.2f}",
+            str(out_path),
+        ]
+    )
+
+
 def encode_final(video_path: Path, out_path: Path) -> None:
     _run(
         [

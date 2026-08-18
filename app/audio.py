@@ -56,8 +56,16 @@ class AudioStage:
             # Re-encode-safe concat for WAV via ffmpeg.
             self._concat_wavs(scene_wavs, narration_master, concat_list)
 
+        # Music/ambience bed: use a supplied bed.wav if present, otherwise
+        # generate a subtle license-clean one (unless disabled). Idempotent.
         master = audio_dir / "master.wav"
-        bed = audio_dir / "bed.wav"  # optional; absent by default (no music bed shipped)
+        bed = audio_dir / "bed.wav"
+        narration_len = ffmpeg.probe_duration(narration_master) or sum(per_scene.values())
+        if not bed.exists() and self.settings.music_bed_enabled and narration_len > 0:
+            try:
+                ffmpeg.generate_ambient_bed(bed, duration=narration_len)
+            except Exception:
+                bed = audio_dir / "bed.wav"  # if generation fails, mix runs without it
         ffmpeg.mix_audio_tracks(narration_master, master, bed=bed if bed.exists() else None)
         total = ffmpeg.probe_duration(master) or sum(per_scene.values())
         return AudioResult(master=master, per_scene=per_scene, provider=provider, total=total)
