@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Crime YouTube Factory — Dashboard</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#242833; --fg:#e7e9ee; --muted:#9aa1b1; --accent:#d24b4b; --ok:#4caf7d; --warn:#e0b04a; --fail:#e0574a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; }
+  header { padding:16px 22px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:14px; }
+  header h1 { font-size:16px; margin:0; letter-spacing:.3px; }
+  header .badge { font-size:11px; padding:3px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+  nav { display:flex; gap:4px; flex-wrap:wrap; padding:10px 18px; border-bottom:1px solid var(--line); }
+  nav button { background:transparent; border:1px solid transparent; color:var(--muted); padding:6px 12px; border-radius:8px; cursor:pointer; font-size:13px; }
+  nav button.active, nav button:hover { color:var(--fg); border-color:var(--line); background:var(--panel); }
+  main { padding:22px; max-width:1100px; margin:0 auto; }
+  .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card .k { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.5px; }
+  .card .v { font-size:26px; font-weight:600; margin-top:6px; }
+  table { width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); font-size:13px; }
+  th { color:var(--muted); font-weight:600; }
+  .pill { padding:2px 8px; border-radius:999px; font-size:11px; border:1px solid var(--line); }
+  .PASS,.CONNECTED,.free { color:var(--ok); } .WARN,.OPTIONAL,.free_tier { color:var(--warn); } .FAIL,.MISSING,.paid { color:var(--fail); }
+  .hidden { display:none; }
+  .section-title { margin:0 0 12px; font-size:15px; }
+  .muted { color:var(--muted); }
+  .overflow { overflow-x:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔎 Crime YouTube Factory</h1>
+  <span class="badge" id="tzBadge">—</span>
+  <span class="badge" id="modeBadge">—</span>
+  <span class="badge" id="costBadge">—</span>
+</header>
+<nav id="nav"></nav>
+<main id="main"></main>
+<script>
+const SCREENS = ["Overview","Story Queue","Videos","Providers","Accounts","Analytics","Logs"];
+let active = "Overview";
+
+async function j(u){ const r = await fetch(u); return r.json(); }
+
+function pill(cls, text){ return `<span class="pill ${cls}">${text}</span>`; }
+
+async function renderOverview(){
+  const o = await j("/api/overview");
+  document.getElementById("tzBadge").textContent = "TZ " + o.timezone;
+  document.getElementById("modeBadge").textContent = o.upload_enabled ? (o.public_auto_publish? "PUBLIC AUTO" : "PRIVATE UPLOAD") : "RENDER ONLY";
+  document.getElementById("costBadge").textContent = o.allow_paid ? "PAID ALLOWED" : "¥0 GUARD ON";
+  const cards = [
+    ["Stories tracked", o.total_stories],
+    ["Videos generated", o.videos_generated],
+    ["Ready", o.ready],
+    ["Published", o.published],
+    ["Upload mode", o.upload_enabled ? "on" : "render-only"],
+    ["Paid services", o.allow_paid ? "ALLOWED" : "blocked"],
+  ];
+  let html = `<div class="grid">` + cards.map(([k,v])=>`<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("") + `</div>`;
+  html += `<h3 class="section-title" style="margin-top:22px">State breakdown</h3><div class="overflow"><table><tr><th>State</th><th>Count</th></tr>` +
+    Object.entries(o.counts||{}).map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join("") + `</table></div>`;
+  return html;
+}
+
+async function renderStories(){
+  const s = await j("/api/stories");
+  const rows = Object.values(s).map(r=>`<tr><td>${r.story_id}</td><td>${pill("", r.state)}</td><td>${(r.meta&&r.meta.score)||"—"}</td><td class="muted">${(r.history&&r.history.length)||0} transitions</td></tr>`).join("");
+  return `<h3 class="section-title">Story Queue</h3><div class="overflow"><table><tr><th>Story</th><th>State</th><th>Score</th><th>History</th></tr>${rows||'<tr><td colspan=4 class="muted">No stories yet</td></tr>'}</table></div>`;
+}
+
+async function renderVideos(){
+  const s = await j("/api/stories");
+  const done = Object.values(s).filter(r=>["ready","uploaded","scheduled","published"].includes(r.state));
+  const rows = done.map(r=>`<tr><td>${r.story_id}</td><td>${pill("",r.state)}</td></tr>`).join("");
+  return `<h3 class="section-title">Videos</h3><div class="overflow"><table><tr><th>Story</th><th>State</th></tr>${rows||'<tr><td colspan=2 class="muted">No finished videos yet</td></tr>'}</table></div>`;
+}
+
+async function renderProviders(){
+  const p = await j("/api/providers");
+  const rows = p.map(x=>`<tr><td>${x.provider}</td><td>${x.kind}</td><td>${pill(x.cost_class,x.cost_class)}</td><td>${x.quota??"∞"}</td><td>${x.requests}</td><td>${x.failures}</td><td>${x.available?"yes":"no"}</td><td class="muted">${x.fallback||"—"}</td><td>¥${x.actual_cost_yen}</td></tr>`).join("");
+  return `<h3 class="section-title">Provider / Fallback Matrix</h3><div class="overflow"><table><tr><th>Provider</th><th>Kind</th><th>Cost</th><th>Quota</th><th>Req</th><th>Fail</th><th>Avail</th><th>Fallback</th><th>Actual ¥</th></tr>${rows}</table></div>`;
+}
+
+async function renderAccounts(){
+  const c = await j("/api/connectors");
+  const rows = c.map(x=>`<tr><td>${x.name}</td><td>${pill(x.state,x.state)}</td><td class="muted">${x.purpose}</td></tr>`).join("");
+  return `<h3 class="section-title">Accounts / Connectors <span class="muted">(secrets never shown)</span></h3><div class="overflow"><table><tr><th>Service</th><th>Status</th><th>Purpose</th></tr>${rows}</table></div>`;
+}
+
+async function renderAnalytics(){
+  const a = await j("/api/analytics");
+  let html = `<h3 class="section-title">Weekly Analytics</h3><div class="card"><div class="k">Videos considered</div><div class="v">${a.videos_considered}</div><p class="muted">${a.note}</p><p class="muted">Safety rules unchanged: ${a.safety_rules_unchanged}</p></div>`;
+  if((a.recommendations||[]).length){
+    html += `<div class="overflow" style="margin-top:14px"><table><tr><th>Dimension</th><th>Signal</th><th>Weight Δ</th></tr>` + a.recommendations.map(r=>`<tr><td>${r.dimension}</td><td>${r.signal}</td><td>${r.weight_delta}</td></tr>`).join("") + `</table></div>`;
+  }
+  return html;
+}
+
+async function renderLogs(){
+  const h = await j("/api/health"); const al = await j("/api/alerts");
+  let html = `<h3 class="section-title">Health</h3><div class="overflow"><table><tr><th>Check</th><th>Status</th><th>Detail</th></tr>` +
+    h.map(c=>`<tr><td>${c.name}</td><td>${pill(c.status,c.status)}</td><td class="muted">${c.detail}</td></tr>`).join("") + `</table></div>`;
+  html += `<h3 class="section-title" style="margin-top:22px">Recent alerts</h3>`;
+  html += al.length ? `<div class="overflow"><table><tr><th>Time</th><th>Title</th></tr>` + al.map(a=>`<tr><td class="muted">${a.created_at||""}</td><td>${a.title||""}</td></tr>`).join("") + `</table></div>` : `<p class="muted">No alerts logged.</p>`;
+  return html;
+}
+
+const RENDERERS = { "Overview":renderOverview, "Story Queue":renderStories, "Videos":renderVideos, "Providers":renderProviders, "Accounts":renderAccounts, "Analytics":renderAnalytics, "Logs":renderLogs };
+
+function buildNav(){
+  const nav = document.getElementById("nav");
+  nav.innerHTML = SCREENS.map(s=>`<button data-s="${s}" class="${s===active?'active':''}">${s}</button>`).join("");
+  nav.querySelectorAll("button").forEach(b=>b.onclick=()=>{ active=b.dataset.s; buildNav(); paint(); });
+}
+async function paint(){
+  const main = document.getElementById("main");
+  main.innerHTML = `<p class="muted">Loading…</p>`;
+  try { main.innerHTML = await (RENDERERS[active]||renderOverview)(); }
+  catch(e){ main.innerHTML = `<p class="FAIL">Error: ${e}</p>`; }
+}
+buildNav(); paint();
+</script>
+</body>
+</html>
