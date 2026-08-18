@@ -13,17 +13,21 @@ import re
 from app.config import Settings, get_settings
 from app.models import Person, Scene, VisualType
 
-# Rotation used to keep the visual mix varied and documentary-like.
-_VISUAL_ROTATION = [
-    VisualType.STOCK_IMAGE,
-    VisualType.LOCATION,
-    VisualType.MAP,
-    VisualType.STOCK_VIDEO,
-    VisualType.DOCUMENT,
-    VisualType.TIMELINE,
-    VisualType.TEXT_CARD,
-    VisualType.DIAGRAM,
-]
+# Which concrete visual types realise each budget category (spec §15). The
+# storyboard allocates scenes to these categories by the configurable
+# ``VisualMix`` percentages, then rotates within a category for variety.
+_MIX_CATEGORY_TYPES: dict[str, list[VisualType]] = {
+    "ai_reconstruction": [VisualType.AI_RECONSTRUCTION],
+    "stock": [VisualType.STOCK_VIDEO, VisualType.STOCK_IMAGE, VisualType.LOCATION],
+    "records": [
+        VisualType.DOCUMENT,
+        VisualType.MAP,
+        VisualType.TIMELINE,
+        VisualType.PUBLIC_RECORD,
+        VisualType.DIAGRAM,
+    ],
+    "stills_motion": [VisualType.STOCK_IMAGE, VisualType.TEXT_CARD],
+}
 
 _SAFE_ALTERNATIVES = "location reconstruction, silhouette, generic hands, vehicle, building, map, timeline, object"
 
@@ -50,12 +54,15 @@ class StoryboardEngine:
         # Clamp to the 20-45 beat range.
         beats = self._reshape(beats, lo=20, hi=45)
 
+        # Allocate a visual type to each beat according to the configured mix.
+        visual_plan = self._allocate_visual_types(len(beats))
+
         unconvicted = {p.name for p in people if not p.convicted}
         scenes: list[Scene] = []
         t = 0.0
         for i, beat in enumerate(beats):
             duration = max(5.0, min(12.0, len(beat.split()) / 155.0 * 60.0))
-            vtype = _VISUAL_ROTATION[i % len(_VISUAL_ROTATION)]
+            vtype = visual_plan[i]
             scene = Scene(
                 scene_id=i + 1,
                 start=round(t, 2),
@@ -71,6 +78,48 @@ class StoryboardEngine:
             scenes.append(scene)
             t += duration
         return scenes
+
+    def _allocate_visual_types(self, n: int) -> list[VisualType]:
+        """Distribute ``n`` scenes across visual-type categories in proportion to
+        the configured :class:`~app.config.VisualMix`, then interleave so no
+        category clusters. Largest-remainder rounding keeps the counts summing to
+        exactly ``n``.
+        """
+        mix = self.settings.visual_mix
+        fractions = {
+            "ai_reconstruction": max(0.0, mix.ai_reconstruction),
+            "stock": max(0.0, mix.stock),
+            "records": max(0.0, mix.records),
+            "stills_motion": max(0.0, mix.stills_motion),
+        }
+        total = sum(fractions.values()) or 1.0
+        # Ideal (float) counts, then largest-remainder rounding to integers.
+        ideal = {k: (v / total) * n for k, v in fractions.items()}
+        counts = {k: int(v) for k, v in ideal.items()}
+        remainder = n - sum(counts.values())
+        for k in sorted(ideal, key=lambda k: ideal[k] - counts[k], reverse=True):
+            if remainder <= 0:
+                break
+            counts[k] += 1
+            remainder -= 1
+
+        # Build per-category queues, rotating through the concrete types.
+        queues: dict[str, list[VisualType]] = {}
+        for cat, cnt in counts.items():
+            types = _MIX_CATEGORY_TYPES[cat]
+            queues[cat] = [types[i % len(types)] for i in range(cnt)]
+
+        # Interleave categories evenly across the timeline using a fractional
+        # cursor per category, emitting the one that is most "behind" schedule.
+        plan: list[VisualType] = []
+        emitted = {cat: 0 for cat in counts}
+        for _ in range(n):
+            # Pick the category with remaining items whose emitted/quota ratio is lowest.
+            candidates = [c for c in counts if emitted[c] < counts[c]]
+            cat = min(candidates, key=lambda c: (emitted[c] / counts[c], -counts[c]))
+            plan.append(queues[cat][emitted[cat]])
+            emitted[cat] += 1
+        return plan
 
     def _reshape(self, beats: list[str], *, lo: int, hi: int) -> list[str]:
         if len(beats) > hi:
