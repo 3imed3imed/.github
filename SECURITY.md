@@ -39,6 +39,13 @@ appear in logs, run reports, alerts or the dashboard (the dashboard shows only
 Open a private security advisory or contact the repository owner. Do not file
 public issues for suspected credential exposure.
 
+## Dashboard output encoding
+The dashboard renders operational data into the DOM. All dynamic values pass
+through an `esc()` HTML-escape helper before insertion (defense-in-depth), so
+even if a future field surfaced third-party feed text (e.g. a story headline) it
+could not inject markup. FFmpeg is always invoked with list-form arguments (no
+shell), and no `eval`/`exec`/`pickle`/`yaml.load` is used anywhere in `app/`.
+
 ## Secret scanning
 - `tests/test_providers_failure.py::test_no_hardcoded_secrets_in_source` scans
   the `app/` tree for key-shaped strings on every CI run.

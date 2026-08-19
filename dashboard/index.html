@@ -45,7 +45,17 @@ let active = "Overview";
 
 async function j(u){ const r = await fetch(u); return r.json(); }
 
-function pill(cls, text){ return `<span class="pill ${cls}">${text}</span>`; }
+// Escape any dynamic value before it goes into innerHTML. Defense-in-depth: the
+// current API surface only emits internal identifiers, but escaping here means
+// no future field (e.g. a story headline) can inject markup into the dashboard.
+function esc(v){
+  return String(v ?? "").replace(/[&<>"']/g, c => (
+    {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]
+  ));
+}
+
+// cls is an internal CSS token (status/cost-class), still escaped defensively.
+function pill(cls, text){ return `<span class="pill ${esc(cls)}">${esc(text)}</span>`; }
 
 async function renderOverview(){
   const o = await j("/api/overview");
@@ -60,42 +70,42 @@ async function renderOverview(){
     ["Upload mode", o.upload_enabled ? "on" : "render-only"],
     ["Paid services", o.allow_paid ? "ALLOWED" : "blocked"],
   ];
-  let html = `<div class="grid">` + cards.map(([k,v])=>`<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("") + `</div>`;
+  let html = `<div class="grid">` + cards.map(([k,v])=>`<div class="card"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join("") + `</div>`;
   html += `<h3 class="section-title" style="margin-top:22px">State breakdown</h3><div class="overflow"><table><tr><th>State</th><th>Count</th></tr>` +
-    Object.entries(o.counts||{}).map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join("") + `</table></div>`;
+    Object.entries(o.counts||{}).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("") + `</table></div>`;
   return html;
 }
 
 async function renderStories(){
   const s = await j("/api/stories");
-  const rows = Object.values(s).map(r=>`<tr><td>${r.story_id}</td><td>${pill("", r.state)}</td><td>${(r.meta&&r.meta.score)||"—"}</td><td class="muted">${(r.history&&r.history.length)||0} transitions</td></tr>`).join("");
+  const rows = Object.values(s).map(r=>`<tr><td>${esc(r.story_id)}</td><td>${pill("", r.state)}</td><td>${esc((r.meta&&r.meta.score)||"—")}</td><td class="muted">${(r.history&&r.history.length)||0} transitions</td></tr>`).join("");
   return `<h3 class="section-title">Story Queue</h3><div class="overflow"><table><tr><th>Story</th><th>State</th><th>Score</th><th>History</th></tr>${rows||'<tr><td colspan=4 class="muted">No stories yet</td></tr>'}</table></div>`;
 }
 
 async function renderVideos(){
   const s = await j("/api/stories");
   const done = Object.values(s).filter(r=>["ready","uploaded","scheduled","published"].includes(r.state));
-  const rows = done.map(r=>`<tr><td>${r.story_id}</td><td>${pill("",r.state)}</td></tr>`).join("");
+  const rows = done.map(r=>`<tr><td>${esc(r.story_id)}</td><td>${pill("",r.state)}</td></tr>`).join("");
   return `<h3 class="section-title">Videos</h3><div class="overflow"><table><tr><th>Story</th><th>State</th></tr>${rows||'<tr><td colspan=2 class="muted">No finished videos yet</td></tr>'}</table></div>`;
 }
 
 async function renderProviders(){
   const p = await j("/api/providers");
-  const rows = p.map(x=>`<tr><td>${x.provider}</td><td>${x.kind}</td><td>${pill(x.cost_class,x.cost_class)}</td><td>${x.quota??"∞"}</td><td>${x.requests}</td><td>${x.failures}</td><td>${x.available?"yes":"no"}</td><td class="muted">${x.fallback||"—"}</td><td>¥${x.actual_cost_yen}</td></tr>`).join("");
+  const rows = p.map(x=>`<tr><td>${esc(x.provider)}</td><td>${esc(x.kind)}</td><td>${pill(x.cost_class,x.cost_class)}</td><td>${esc(x.quota??"∞")}</td><td>${esc(x.requests)}</td><td>${esc(x.failures)}</td><td>${x.available?"yes":"no"}</td><td class="muted">${esc(x.fallback||"—")}</td><td>¥${esc(x.actual_cost_yen)}</td></tr>`).join("");
   return `<h3 class="section-title">Provider / Fallback Matrix</h3><div class="overflow"><table><tr><th>Provider</th><th>Kind</th><th>Cost</th><th>Quota</th><th>Req</th><th>Fail</th><th>Avail</th><th>Fallback</th><th>Actual ¥</th></tr>${rows}</table></div>`;
 }
 
 async function renderAccounts(){
   const c = await j("/api/connectors");
-  const rows = c.map(x=>`<tr><td>${x.name}</td><td>${pill(x.state,x.state)}</td><td class="muted">${x.purpose}</td></tr>`).join("");
+  const rows = c.map(x=>`<tr><td>${esc(x.name)}</td><td>${pill(x.state,x.state)}</td><td class="muted">${esc(x.purpose)}</td></tr>`).join("");
   return `<h3 class="section-title">Accounts / Connectors <span class="muted">(secrets never shown)</span></h3><div class="overflow"><table><tr><th>Service</th><th>Status</th><th>Purpose</th></tr>${rows}</table></div>`;
 }
 
 async function renderAnalytics(){
   const a = await j("/api/analytics");
-  let html = `<h3 class="section-title">Weekly Analytics</h3><div class="card"><div class="k">Videos considered</div><div class="v">${a.videos_considered}</div><p class="muted">${a.note}</p><p class="muted">Safety rules unchanged: ${a.safety_rules_unchanged}</p></div>`;
+  let html = `<h3 class="section-title">Weekly Analytics</h3><div class="card"><div class="k">Videos considered</div><div class="v">${esc(a.videos_considered)}</div><p class="muted">${esc(a.note)}</p><p class="muted">Safety rules unchanged: ${esc(a.safety_rules_unchanged)}</p></div>`;
   if((a.recommendations||[]).length){
-    html += `<div class="overflow" style="margin-top:14px"><table><tr><th>Dimension</th><th>Signal</th><th>Weight Δ</th></tr>` + a.recommendations.map(r=>`<tr><td>${r.dimension}</td><td>${r.signal}</td><td>${r.weight_delta}</td></tr>`).join("") + `</table></div>`;
+    html += `<div class="overflow" style="margin-top:14px"><table><tr><th>Dimension</th><th>Signal</th><th>Weight Δ</th></tr>` + a.recommendations.map(r=>`<tr><td>${esc(r.dimension)}</td><td>${esc(r.signal)}</td><td>${esc(r.weight_delta)}</td></tr>`).join("") + `</table></div>`;
   }
   return html;
 }
@@ -103,9 +113,9 @@ async function renderAnalytics(){
 async function renderLogs(){
   const h = await j("/api/health"); const al = await j("/api/alerts");
   let html = `<h3 class="section-title">Health</h3><div class="overflow"><table><tr><th>Check</th><th>Status</th><th>Detail</th></tr>` +
-    h.map(c=>`<tr><td>${c.name}</td><td>${pill(c.status,c.status)}</td><td class="muted">${c.detail}</td></tr>`).join("") + `</table></div>`;
+    h.map(c=>`<tr><td>${esc(c.name)}</td><td>${pill(c.status,c.status)}</td><td class="muted">${esc(c.detail)}</td></tr>`).join("") + `</table></div>`;
   html += `<h3 class="section-title" style="margin-top:22px">Recent alerts</h3>`;
-  html += al.length ? `<div class="overflow"><table><tr><th>Time</th><th>Title</th></tr>` + al.map(a=>`<tr><td class="muted">${a.created_at||""}</td><td>${a.title||""}</td></tr>`).join("") + `</table></div>` : `<p class="muted">No alerts logged.</p>`;
+  html += al.length ? `<div class="overflow"><table><tr><th>Time</th><th>Title</th></tr>` + al.map(a=>`<tr><td class="muted">${esc(a.created_at||"")}</td><td>${esc(a.title||"")}</td></tr>`).join("") + `</table></div>` : `<p class="muted">No alerts logged.</p>`;
   return html;
 }
 
