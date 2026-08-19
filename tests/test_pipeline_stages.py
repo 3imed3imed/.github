@@ -22,7 +22,9 @@ def test_script_length_and_originality(settings):
     script, report = ScriptEngine(settings).write(
         title="A Case Finally Solved", facts=output.facts, people=output.people, sources=output.sources
     )
-    assert 900 <= script.word_count <= 1800
+    # Word count tracks the configured target duration (default ~5 min).
+    target = settings.target_script_words()
+    assert 0.8 * target <= script.word_count <= 1.25 * target
     assert report.ok  # deterministic writer must clear the similarity threshold
 
 
@@ -92,3 +94,19 @@ def test_uploader_dry_run_when_disabled(settings):
     result = up.upload(plan)
     assert result.status == "dry-run"
     assert result.video_id is None
+
+
+def test_script_length_tracks_target_minutes(monkeypatch):
+    # Owner-configurable target duration drives the word count (spec §10 override).
+    monkeypatch.setenv("TARGET_VIDEO_MINUTES", "5")
+    from app.config import reload_settings
+    s = reload_settings()
+    output, _ = Researcher(s).build_fact_database(fx.SOLVED_COLD_CASE, seed_sources=fx.CONFLICTING_SOURCES)
+    script, report = ScriptEngine(s).write(
+        title="A Case", facts=output.facts, people=output.people, sources=output.sources
+    )
+    target = s.target_script_words()  # 775
+    # Within ~20% of the target so rendered duration lands near 5 minutes.
+    assert 0.8 * target <= script.word_count <= 1.25 * target
+    assert report.ok
+    reload_settings()

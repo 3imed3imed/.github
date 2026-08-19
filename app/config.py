@@ -136,6 +136,14 @@ class Settings:
     music_bed_enabled: bool = field(default_factory=lambda: _bool("MUSIC_BED_ENABLED", True))
     target_lufs: float = field(default_factory=lambda: _float("TARGET_LUFS", -14.0))
 
+    # Target episode length. Narration word count is derived from this
+    # (minutes * words-per-minute), which in turn sets the rendered duration.
+    target_video_minutes: float = field(default_factory=lambda: _float("TARGET_VIDEO_MINUTES", 5.0))
+    narration_wpm: int = field(default_factory=lambda: _int("NARRATION_WPM", 155))
+
+    def target_script_words(self) -> int:
+        return max(500, int(self.target_video_minutes * self.narration_wpm))
+
     # YouTube OAuth (refresh token only — never a password).
     youtube_client_id: str | None = field(default_factory=lambda: os.getenv("YOUTUBE_CLIENT_ID"))
     youtube_client_secret: str | None = field(

@@ -88,13 +88,15 @@ class ScriptEngine:
         sources: list[Source],
         on_alert=None,
     ) -> tuple[Script, OriginalityReport]:
+        target_words = self.settings.target_script_words()
         fact_lines = "\n".join(f"- [{f.fact_id} | {f.claim_status}] {f.text}" for f in facts)
         people_lines = "\n".join(f"- {p.name} ({p.legal_status})" for p in people) or "- (none named)"
         system = (
             "You are a careful true-crime documentary writer. Write ORIGINAL narration "
             "(do not copy source wording). Use ONLY the approved facts. Use precise legal "
             "language: never turn arrested into guilty, charged into convicted, or alleged "
-            "into proven. 1000-1600 words, serious documentary tone."
+            f"into proven. Target about {target_words} words "
+            f"(~{self.settings.target_video_minutes:.0f} minutes), serious documentary tone."
         )
         prompt = (
             f"Working title: {title}\n\nApproved facts:\n{fact_lines}\n\nPeople:\n{people_lines}\n\n"
@@ -107,6 +109,7 @@ class ScriptEngine:
 
         text, provider = complete_text(prompt, system=system, fallback=fallback, on_alert=on_alert)
         sections = self._parse_sections(text) or self._deterministic_sections(title, facts, people)
+        sections = self._fit_length(sections, target_words)
         script = Script(
             title_working=title,
             sections=sections,
@@ -135,10 +138,39 @@ class ScriptEngine:
                 "anything the evidence does not support."
             )
             sections.append((name, f"{lead} {body}"))
-        return self._pad_to_length(sections, target=1100)
+        return self._pad_to_length(sections, target=self.settings.target_script_words())
 
     def _deterministic(self, title: str, facts: list[Fact], people: list[Person]) -> str:
         return "\n".join(f"{n}\n{t}" for n, t in self._deterministic_sections(title, facts, people))
+
+    def _fit_length(self, sections: list[tuple[str, str]], target_words: int) -> list[tuple[str, str]]:
+        """Bring the script near the target word count (which sets duration).
+
+        Only trims when comfortably over target (>25%), and only on sentence
+        boundaries so no clause is cut mid-way; never pads here (the
+        deterministic builder already pads up).
+        """
+        import re as _re
+
+        total = sum(len(t.split()) for _, t in sections)
+        if total <= target_words * 1.25 or not sections:
+            return sections
+        budget = target_words
+        out: list[tuple[str, str]] = []
+        for name, text in sections:
+            if budget <= 0:
+                break
+            sents = _re.split(r"(?<=[.!?])\s+", text)
+            kept, used = [], 0
+            for s in sents:
+                w = len(s.split())
+                if kept and used + w > budget:
+                    break
+                kept.append(s)
+                used += w
+            budget -= used
+            out.append((name, " ".join(kept).strip() or text.split(".")[0] + "."))
+        return out or sections
 
     def _reword_anchor(self, text: str) -> str:
         # Compress the anchor into an original framing clause rather than quoting.
@@ -208,12 +240,27 @@ class ScriptEngine:
     def _pad_to_length(self, sections: list[tuple[str, str]], target: int) -> list[tuple[str, str]]:
         words = sum(len(t.split()) for _, t in sections)
         i = 0
-        while words < target and i < 300:
-            name, text = sections[i % len(sections)]
-            connective = self._PADDING[i % len(self._PADDING)]
-            sections[i % len(sections)] = (name, text + connective)
-            words += len(connective.split())
+        # Prime with the padding already present so we never re-append a line a
+        # section ends with (avoids duplicated sentences in narration/captions).
+        used: list[set[str]] = [
+            {p.strip() for p in self._PADDING if p.strip() and text.rstrip().endswith(p.strip())}
+            for _, text in sections
+        ]
+        while words < target and i < 600:
+            sec = i % len(sections)
+            name, text = sections[sec]
+            # Pick the next padding line this section has not used yet.
+            choice = next(
+                (p for k in range(len(self._PADDING))
+                 if (p := self._PADDING[(i + k) % len(self._PADDING)]).strip() not in used[sec]),
+                None,
+            )
             i += 1
+            if choice is None:  # this section already carries every padding line
+                continue
+            sections[sec] = (name, text + choice)
+            used[sec].add(choice.strip())
+            words += len(choice.split())
         return sections
 
     def _parse_sections(self, text: str) -> list[tuple[str, str]]:
