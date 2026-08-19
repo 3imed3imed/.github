@@ -44,6 +44,15 @@
   .edit textarea { resize:vertical; line-height:1.5; }
   .editbar { display:flex; align-items:center; gap:10px; margin-top:4px; }
   .msg { font-size:12px; } .msg.ok { color:var(--ok); } .msg.fail { color:var(--fail); }
+  .studiogrid { display:grid; gap:14px; grid-template-columns:minmax(0,1fr) auto; align-items:start; }
+  @media (max-width:720px){ .studiogrid { grid-template-columns:1fr; } }
+  .thumb { width:220px; max-width:40vw; border-radius:8px; border:1px solid var(--line); display:block; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; }
+  button.chip:hover { border-color:var(--accent); }
+  .chip.PASS { color:var(--ok); } .chip.FAIL { color:var(--fail); }
+  .sources { margin:8px 0 0; padding-left:18px; } .sources li { margin:3px 0; font-size:13px; }
+  details summary { cursor:pointer; }
 </style>
 </head>
 <body>
@@ -72,6 +81,14 @@ function esc(v){
 
 // cls is an internal CSS token (status/cost-class), still escaped defensively.
 function pill(cls, text){ return `<span class="pill ${esc(cls)}">${esc(text)}</span>`; }
+
+// Only http(s) URLs may become clickable links. Source URLs originate from
+// external discovery adapters, so a javascript:/data: scheme must never reach
+// an href; anything else is rendered as inert escaped text by the caller.
+function safeUrl(u){
+  const s = String(u ?? "").trim();
+  return /^https?:\/\//i.test(s) ? s : "";
+}
 
 async function renderOverview(){
   const o = await j("/api/overview");
@@ -133,21 +150,43 @@ window.openStudio = async function(id){
   host.dataset.open='1'; host.innerHTML='<p class="muted">Loading…</p>';
   const u=encodeURIComponent(id);
   const e=await j('/api/episode/'+u);
+  const chapters=(e.chapters||[]).map(c=>`<button class="chip" onclick="seekTo(this,${Number(c.seconds)||0})">${esc(c.time)} · ${esc(c.label)}</button>`).join('');
+  const checks=Object.entries(e.qc_checks||{}).map(([k,v])=>`<span class="chip ${v?'PASS':'FAIL'}">${v?'✓':'✗'} ${esc(k.replace(/_/g,' '))}</span>`).join('');
+  const sources=(e.sources||[]).map(s=>{
+    const label=esc(s.title||s.id||'source'); const t=esc(s.source_type||''); const url=safeUrl(s.url);
+    return url? `<li><a href="${esc(url)}" target="_blank" rel="noopener">${label}</a> <span class="muted">${t}</span></li>` : `<li>${label} <span class="muted">${t}</span></li>`;
+  }).join('');
   host.innerHTML=`
-    <video controls playsinline preload="metadata" class="player" crossorigin="anonymous">
-      <source src="/api/video/${u}" type="video/mp4" />
-      ${e.has_captions?`<track kind="subtitles" srclang="en" label="English" default src="/api/captions/${u}/vtt" />`:''}
-    </video>
+    <div class="studiogrid">
+      <div>
+        <video controls playsinline preload="metadata" class="player" crossorigin="anonymous">
+          <source src="/api/video/${u}" type="video/mp4" />
+          ${e.has_captions?`<track kind="subtitles" srclang="en" label="English" default src="/api/captions/${u}/vtt" />`:''}
+        </video>
+        ${chapters?`<div class="chips" style="margin-top:8px">${chapters}</div>`:''}
+      </div>
+      ${e.has_thumbnail?`<div><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Thumbnail</div><img class="thumb" src="/api/thumbnail/${u}" alt="thumbnail" /></div>`:''}
+    </div>
+    ${checks?`<div class="chips" style="margin-top:12px">${checks}</div>`:''}
     <div class="edit">
       <label>Title</label>
       <input id="t-${id}" value="${esc(e.title)}" maxlength="100" />
       <label>Description</label>
       <textarea id="d-${id}" rows="9">${esc(e.description)}</textarea>
       <div class="editbar"><button class="btn primary" onclick="saveEpisode('${id}')">Save changes</button>
-        <a class="btn ghost" href="/api/captions/${u}" target="_blank">View captions</a>
+        <a class="btn ghost" href="/api/captions/${u}" target="_blank">Captions</a>
+        <a class="btn ghost" href="/api/video/${u}" download="${u}.mp4">Download master</a>
         <span id="msg-${id}" class="msg muted"></span></div>
     </div>
-    <div class="muted" style="font-size:12px;margin-top:6px">${e.script_words} words · ${e.storyboard_scenes} scenes · ${(e.sources||[]).length} sources · AI media: ${e.synthetic_media?'yes':'no'}</div>`;
+    ${sources?`<details style="margin-top:12px"><summary class="muted">${(e.sources||[]).length} sources</summary><ul class="sources">${sources}</ul></details>`:''}
+    <div class="muted" style="font-size:12px;margin-top:8px">${e.script_words} words · ${e.storyboard_scenes} scenes · AI media: ${e.synthetic_media?'yes':'no'}</div>`;
+};
+
+window.seekTo = function(btn, seconds){
+  // Find the player within the same studio panel — no story id in the handler.
+  const host=btn.closest('.studio');
+  const v=host && host.querySelector('video');
+  if(v){ v.currentTime=seconds; v.play&&v.play().catch(()=>{}); }
 };
 
 window.saveEpisode = async function(id){

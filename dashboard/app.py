@@ -333,21 +333,61 @@ def api_episode(story: str) -> JSONResponse:
 
     md = _read("metadata.json") or {}
     script = _read("script.json") or {}
+    qc = _read("qc_report.json") or {}
+    try:
+        description = (proj / "description.txt").read_text()
+    except OSError:
+        description = md.get("description", "")
     return JSONResponse(
         {
             "story_id": story,
             "title": md.get("title", ""),
-            "description": (proj / "description.txt").read_text() if (proj / "description.txt").exists() else md.get("description", ""),
+            "description": description,
             "synthetic_media": md.get("synthetic_media_used", False),
-            "qc": _read("qc_report.json") or {},
+            "qc": qc,
+            "qc_checks": qc.get("checks", {}),
+            "chapters": _parse_chapters(description),
             "sources": _read("sources.json") or [],
             "storyboard_scenes": len(_read("storyboard.json") or []),
             "script_words": script.get("word_count", 0),
             "script_sections": script.get("sections", []),
             "has_video": (proj / "final.mp4").exists(),
             "has_captions": (proj / "captions.srt").exists(),
+            "has_thumbnail": (proj / "thumbnail.jpg").exists(),
         }
     )
+
+
+_CHAPTER_RE = re.compile(r"^((?:\d{1,3}:)?\d{1,3}:\d{2})\s+(.+)$")
+
+
+def _parse_chapters(description: str) -> list[dict]:
+    """Extract the ``Chapters:`` block from a description into seekable marks.
+
+    A ``Chapters:`` header may appear more than once (the summary body is
+    owner-editable), so each header starts a fresh candidate run of consecutive
+    timestamped lines; the longest run wins. Minute/second fields allow up to
+    three digits so a 100-minute-plus mark still parses.
+    """
+    runs: list[list[dict]] = []
+    current: list[dict] | None = None
+    for line in description.splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("chapters:"):
+            current = []
+            runs.append(current)
+            continue
+        if current is None:
+            continue
+        m = _CHAPTER_RE.match(stripped)
+        if not m:
+            if stripped:  # a non-chapter line ends this run (header may recur later)
+                current = None
+            continue
+        parts = [int(p) for p in m.group(1).split(":")]
+        seconds = parts[0] * 60 + parts[1] if len(parts) == 2 else parts[0] * 3600 + parts[1] * 60 + parts[2]
+        current.append({"time": m.group(1), "seconds": seconds, "label": m.group(2).strip()})
+    return max(runs, key=len) if runs else []
 
 
 @app.get("/api/video/{story}")
@@ -358,6 +398,15 @@ def api_video(story: str):
         raise HTTPException(status_code=404, detail="no video")
     # FileResponse serves HTTP Range requests, so the browser can seek/stream.
     return FileResponse(str(video), media_type="video/mp4", filename=f"{story}.mp4")
+
+
+@app.get("/api/thumbnail/{story}")
+def api_thumbnail(story: str):
+    proj = _project_dir(story)
+    thumb = proj / "thumbnail.jpg"
+    if not thumb.exists():
+        raise HTTPException(status_code=404, detail="no thumbnail")
+    return FileResponse(str(thumb), media_type="image/jpeg")
 
 
 @app.get("/api/captions/{story}")
