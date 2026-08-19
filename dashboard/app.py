@@ -64,6 +64,50 @@ def _overview() -> dict:
     }
 
 
+def _production() -> list[dict]:
+    """Per-project production reports (run_report + qc + upload status)."""
+    s = get_settings()
+    out: list[dict] = []
+    if not s.projects_dir.exists():
+        return out
+
+    def _read(proj, name: str):
+        p = proj / name
+        if not p.exists():
+            return None
+        try:
+            return json.loads(p.read_text())
+        except Exception:
+            return None
+
+    for proj in sorted(s.projects_dir.iterdir()):
+        if not proj.is_dir():
+            continue
+        run = _read(proj, "run_report.json") or {}
+        qc = _read(proj, "qc_report.json") or {}
+        upload = _read(proj, "upload.json") or {}
+        meta = _read(proj, "metadata.json") or {}
+        out.append(
+            {
+                "story_id": proj.name,
+                "stage": run.get("stage", ""),
+                "status": run.get("status", ""),
+                "elapsed_time": run.get("elapsed_time", 0),
+                "actual_cost": run.get("actual_cost", 0),
+                "synthetic_media": run.get("synthetic_media_used", False),
+                "qc_passed": qc.get("passed"),
+                "qc_failures": qc.get("failures", []),
+                "upload_status": upload.get("status", ""),
+                "privacy": upload.get("privacy_status", ""),
+                "title": meta.get("title", ""),
+                "has_final": (proj / "final.mp4").exists(),
+            }
+        )
+    # Most recently finished first.
+    out.sort(key=lambda r: r.get("status") == "success", reverse=True)
+    return out
+
+
 def _alerts() -> list[dict]:
     s = get_settings()
     adir = s.data_dir / "alerts"
@@ -106,6 +150,11 @@ def api_health() -> JSONResponse:
 @app.get("/api/analytics")
 def api_analytics() -> JSONResponse:
     return JSONResponse(AnalyticsEngine().run_weekly().to_dict())
+
+
+@app.get("/api/production")
+def api_production() -> JSONResponse:
+    return JSONResponse(_production())
 
 
 @app.get("/api/alerts")

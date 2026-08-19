@@ -40,7 +40,7 @@
 <nav id="nav"></nav>
 <main id="main"></main>
 <script>
-const SCREENS = ["Overview","Story Queue","Videos","Providers","Accounts","Analytics","Logs"];
+const SCREENS = ["Overview","Story Queue","Production","Videos","Providers","Accounts","Analytics","Logs"];
 let active = "Overview";
 
 async function j(u){ const r = await fetch(u); return r.json(); }
@@ -82,6 +82,19 @@ async function renderStories(){
   return `<h3 class="section-title">Story Queue</h3><div class="overflow"><table><tr><th>Story</th><th>State</th><th>Score</th><th>History</th></tr>${rows||'<tr><td colspan=4 class="muted">No stories yet</td></tr>'}</table></div>`;
 }
 
+async function renderProduction(){
+  const p = await j("/api/production");
+  if(!p.length) return `<h3 class="section-title">Production</h3><p class="muted">No production runs yet.</p>`;
+  const rows = p.map(r=>{
+    const qc = r.qc_passed===true ? pill("PASS","QC ✓") : (r.qc_passed===false ? pill("FAIL","QC ✗") : "—");
+    const cost = `¥${esc(r.actual_cost)}`;
+    const syn = r.synthetic_media ? "AI-recon" : "—";
+    const fails = (r.qc_failures||[]).length ? `<div class="muted" style="font-size:11px">${esc((r.qc_failures||[]).join("; "))}</div>` : "";
+    return `<tr><td>${esc(r.story_id)}${fails}</td><td>${pill("",r.status||"—")}</td><td>${esc(r.stage)}</td><td>${qc}</td><td>${esc(r.upload_status||"—")}</td><td>${esc(r.privacy||"—")}</td><td>${syn}</td><td>${esc(r.elapsed_time)}s</td><td>${cost}</td></tr>`;
+  }).join("");
+  return `<h3 class="section-title">Production</h3><div class="overflow"><table><tr><th>Story</th><th>Status</th><th>Stage</th><th>QC</th><th>Upload</th><th>Privacy</th><th>Media</th><th>Elapsed</th><th>Cost</th></tr>${rows}</table></div>`;
+}
+
 async function renderVideos(){
   const s = await j("/api/stories");
   const done = Object.values(s).filter(r=>["ready","uploaded","scheduled","published"].includes(r.state));
@@ -119,7 +132,7 @@ async function renderLogs(){
   return html;
 }
 
-const RENDERERS = { "Overview":renderOverview, "Story Queue":renderStories, "Videos":renderVideos, "Providers":renderProviders, "Accounts":renderAccounts, "Analytics":renderAnalytics, "Logs":renderLogs };
+const RENDERERS = { "Overview":renderOverview, "Story Queue":renderStories, "Production":renderProduction, "Videos":renderVideos, "Providers":renderProviders, "Accounts":renderAccounts, "Analytics":renderAnalytics, "Logs":renderLogs };
 
 function buildNav(){
   const nav = document.getElementById("nav");
