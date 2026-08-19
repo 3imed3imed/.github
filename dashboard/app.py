@@ -10,10 +10,12 @@ it works with zero external services.
 from __future__ import annotations
 
 import json
+import re
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from app.analytics import AnalyticsEngine
-from app.config import get_settings
+from app.config import REPO_ROOT, get_settings
 from app.health import run_all
 from app.providers.legal import CourtListenerProvider
 from app.providers.llm import build_llm_chain
@@ -64,6 +66,17 @@ def _overview() -> dict:
     }
 
 
+def _read_project_json(proj: Path, name: str):
+    """Load a project JSON file, returning None if absent or unparseable."""
+    p = proj / name
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return None
+
+
 def _production() -> list[dict]:
     """Per-project production reports (run_report + qc + upload status)."""
     s = get_settings()
@@ -72,13 +85,7 @@ def _production() -> list[dict]:
         return out
 
     def _read(proj, name: str):
-        p = proj / name
-        if not p.exists():
-            return None
-        try:
-            return json.loads(p.read_text())
-        except Exception:
-            return None
+        return _read_project_json(proj, name)
 
     for proj in sorted(s.projects_dir.iterdir()):
         if not proj.is_dir():
@@ -107,6 +114,138 @@ def _production() -> list[dict]:
     # Most recently finished first (unfinished runs, with empty finished_at,
     # sort to the bottom).
     out.sort(key=lambda r: r.get("finished_at") or "", reverse=True)
+    return out
+
+
+_STAGE_LABELS = {
+    "discover": "Discover stories",
+    "verify_score": "Verify + score",
+    "select_winner": "Select winner",
+    "script_board": "Script + storyboard",
+    "assets": "Assets",
+    "render": "Render",
+    "qc": "Quality control",
+    "upload": "Upload (gated)",
+    "publish": "Scheduled publish",
+}
+
+
+def _load_schedule_file() -> dict:
+    path = REPO_ROOT / "config" / "schedule.yml"
+    if not path.exists():
+        return {}
+    try:
+        import yaml
+
+        return yaml.safe_load(path.read_text()) or {}
+    except Exception:
+        return {}
+
+
+def _tz(name: str):
+    try:
+        from zoneinfo import ZoneInfo
+
+        return ZoneInfo(name)
+    except Exception:  # pragma: no cover - tzdata missing
+        return None
+
+
+def _next_occurrence(hhmm: str, tz) -> datetime | None:
+    """Next wall-clock datetime for an ``HH:MM`` time in the given timezone."""
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", str(hhmm).strip())
+    if not m:
+        return None
+    hour, minute = int(m.group(1)), int(m.group(2))
+    now = datetime.now(tz) if tz else datetime.now()
+    nxt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if nxt <= now:
+        nxt += timedelta(days=1)
+    return nxt
+
+
+def _schedule() -> dict:
+    s = get_settings()
+    cfg = _load_schedule_file()
+    tzname = cfg.get("timezone") or s.timezone
+    tz = _tz(tzname)
+    now = datetime.now(tz) if tz else datetime.now()
+
+    daily = cfg.get("daily", {}) or {}
+    stages = []
+    for key, label in _STAGE_LABELS.items():
+        t = daily.get(key)
+        if not t:
+            continue
+        nxt = _next_occurrence(t, tz)
+        stages.append(
+            {
+                "key": key,
+                "label": label,
+                "time": t,
+                "next_run": nxt.isoformat() if nxt else None,
+                "in_minutes": int((nxt - now).total_seconds() // 60) if nxt else None,
+            }
+        )
+
+    def _time_key(st: dict) -> tuple[int, int]:
+        m = re.fullmatch(r"(\d{1,2}):(\d{2})", str(st["time"]).strip())
+        return (int(m.group(1)), int(m.group(2))) if m else (99, 99)
+
+    stages.sort(key=_time_key)
+
+    weekly = cfg.get("weekly", {}) or {}
+    return {
+        "timezone": tzname,
+        "now": now.isoformat(),
+        "stages": stages,
+        "weekly": {
+            "analytics_day": weekly.get("analytics_day"),
+            "analytics_time": weekly.get("analytics_time"),
+        },
+        "guardrails": {
+            "one_job_at_a_time": cfg.get("one_job_at_a_time"),
+            "max_runtime_minutes": cfg.get("max_runtime_minutes"),
+        },
+        "upload_enabled": s.safety.upload_enabled,
+        "public_auto_publish": s.safety.public_auto_publish,
+        "publications": _publication_queue(),
+    }
+
+
+def _publication_queue() -> list[dict]:
+    """Rendered episodes and where they sit in the publish pipeline."""
+    s = get_settings()
+    out: list[dict] = []
+    if not s.projects_dir.exists():
+        return out
+
+    for proj in sorted(s.projects_dir.iterdir()):
+        if not proj.is_dir() or not (proj / "final.mp4").exists():
+            continue
+        meta = _read_project_json(proj, "metadata.json") or {}
+        upload = _read_project_json(proj, "upload.json") or {}
+        qc = _read_project_json(proj, "qc_report.json") or {}
+        privacy = upload.get("privacy_status") or "none"
+        publish_at = upload.get("publish_at")
+        if publish_at:
+            stage = "scheduled"
+        elif upload.get("status") in {"uploaded", "success"}:
+            stage = "uploaded"
+        elif qc.get("passed"):
+            stage = "ready"
+        else:
+            stage = "rendered"
+        out.append(
+            {
+                "story_id": proj.name,
+                "title": meta.get("title", proj.name),
+                "stage": stage,
+                "privacy": privacy,
+                "publish_at": publish_at,
+                "qc_passed": qc.get("passed"),
+            }
+        )
     return out
 
 
@@ -157,6 +296,11 @@ def api_analytics() -> JSONResponse:
 @app.get("/api/production")
 def api_production() -> JSONResponse:
     return JSONResponse(_production())
+
+
+@app.get("/api/schedule")
+def api_schedule() -> JSONResponse:
+    return JSONResponse(_schedule())
 
 
 # --------------------------------------------------------------------------- #
@@ -223,6 +367,27 @@ def api_captions(story: str) -> PlainTextResponse:
     if not srt.exists():
         raise HTTPException(status_code=404, detail="no captions")
     return PlainTextResponse(srt.read_text())
+
+
+@app.get("/api/captions/{story}/vtt")
+def api_captions_vtt(story: str) -> PlainTextResponse:
+    """WebVTT rendition so the player can show subtitles via a <track>."""
+    proj = _project_dir(story)
+    srt = proj / "captions.srt"
+    if not srt.exists():
+        raise HTTPException(status_code=404, detail="no captions")
+    body = _srt_to_vtt(srt.read_text())
+    return PlainTextResponse(body, media_type="text/vtt")
+
+
+def _srt_to_vtt(srt: str) -> str:
+    """Convert SRT text to WebVTT (header + comma→dot in cue timestamps)."""
+    lines = []
+    for line in srt.splitlines():
+        if "-->" in line:
+            line = line.replace(",", ".")
+        lines.append(line)
+    return "WEBVTT\n\n" + "\n".join(lines)
 
 
 @app.post("/api/episode/{story}/metadata")

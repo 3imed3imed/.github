@@ -56,7 +56,7 @@
 <nav id="nav"></nav>
 <main id="main"></main>
 <script>
-const SCREENS = ["Overview","Story Queue","Production","Videos","Providers","Accounts","Analytics","Logs"];
+const SCREENS = ["Overview","Story Queue","Production","Videos","Schedule","Providers","Accounts","Analytics","Logs"];
 let active = "Overview";
 
 async function j(u){ const r = await fetch(u); return r.json(); }
@@ -134,7 +134,10 @@ window.openStudio = async function(id){
   const u=encodeURIComponent(id);
   const e=await j('/api/episode/'+u);
   host.innerHTML=`
-    <video controls preload="metadata" class="player" src="/api/video/${u}"></video>
+    <video controls playsinline preload="metadata" class="player" crossorigin="anonymous">
+      <source src="/api/video/${u}" type="video/mp4" />
+      ${e.has_captions?`<track kind="subtitles" srclang="en" label="English" default src="/api/captions/${u}/vtt" />`:''}
+    </video>
     <div class="edit">
       <label>Title</label>
       <input id="t-${id}" value="${esc(e.title)}" maxlength="100" />
@@ -155,6 +158,57 @@ window.saveEpisode = async function(id){
   if(r.ok){ const d=await r.json(); msg.textContent='Saved · '+d.changed.join(', '); msg.className='msg ok'; }
   else { const d=await r.json().catch(()=>({})); msg.textContent='Error: '+(d.detail||r.status); msg.className='msg fail'; }
 };
+
+function fmtClock(iso){
+  if(!iso) return "—";
+  try { return new Date(iso).toLocaleString([], {weekday:'short', hour:'2-digit', minute:'2-digit'}); }
+  catch(e){ return iso; }
+}
+function fmtIn(mins){
+  if(mins==null) return "";
+  if(mins<0) return "";
+  const h=Math.floor(mins/60), m=mins%60;
+  return h? `in ${h}h ${m}m` : `in ${m}m`;
+}
+
+async function renderSchedule(){
+  const s = await j("/api/schedule");
+  const mode = s.upload_enabled ? (s.public_auto_publish? "PUBLIC AUTO-PUBLISH" : "PRIVATE UPLOAD") : "RENDER ONLY";
+  let html = `<h3 class="section-title">Production Schedule</h3>
+    <p class="muted">Daily pipeline in <b>${esc(s.timezone)}</b>. Times are configured in <code>config/schedule.yml</code>; GitHub Actions runs them in UTC. Current mode: ${pill(s.upload_enabled?'PASS':'WARN', mode)}</p>`;
+
+  // Daily pipeline timeline.
+  const next = s.stages.reduce((a,b)=> (a==null || (b.in_minutes!=null && b.in_minutes < a.in_minutes)) ? b.in_minutes : a, null);
+  html += `<div class="overflow"><table><tr><th>Time</th><th>Stage</th><th>Next run</th><th></th></tr>` +
+    s.stages.map(st=>{
+      const soon = st.in_minutes===next && next!=null;
+      return `<tr${soon?' style="background:rgba(210,75,75,.08)"':''}><td><b>${esc(st.time)}</b></td><td>${esc(st.label)}</td><td class="muted">${esc(fmtClock(st.next_run))}</td><td class="muted">${esc(fmtIn(st.in_minutes))}${soon?' · next':''}</td></tr>`;
+    }).join("") + `</table></div>`;
+
+  // Weekly + guardrails.
+  const w = s.weekly||{}, g = s.guardrails||{};
+  html += `<div class="grid" style="margin-top:14px">
+    <div class="card"><div class="k">Weekly analytics</div><div class="v" style="font-size:18px">${esc((w.analytics_day||'—'))} ${esc(w.analytics_time||'')}</div></div>
+    <div class="card"><div class="k">One job at a time</div><div class="v" style="font-size:18px">${g.one_job_at_a_time?'yes':'no'}</div></div>
+    <div class="card"><div class="k">Max runtime</div><div class="v" style="font-size:18px">${esc(g.max_runtime_minutes??'—')} min</div></div>
+  </div>`;
+
+  // Publication queue.
+  const pubs = s.publications||[];
+  html += `<h3 class="section-title" style="margin-top:22px">Publication queue</h3>`;
+  if(!pubs.length){
+    html += `<p class="muted">No rendered episodes yet.</p>`;
+  } else {
+    html += `<div class="overflow"><table><tr><th>Episode</th><th>Stage</th><th>Privacy</th><th>Publish at</th><th>QC</th></tr>` +
+      pubs.map(p=>{
+        const qc = p.qc_passed===true? pill("PASS","QC ✓") : (p.qc_passed===false? pill("FAIL","QC ✗") : "—");
+        const stCls = p.stage==='scheduled'?'PASS':(p.stage==='uploaded'?'PASS':'WARN');
+        return `<tr><td>${esc(p.title)}<div class="muted" style="font-size:11px">${esc(p.story_id)}</div></td><td>${pill(stCls,p.stage)}</td><td>${esc(p.privacy)}</td><td class="muted">${esc(p.publish_at? fmtClock(p.publish_at) : (s.upload_enabled?'—':'render-only'))}</td><td>${qc}</td></tr>`;
+      }).join("") + `</table></div>`;
+  }
+  html += `<p class="muted" style="margin-top:10px">Publishing is gated: videos never go public automatically. A public video only happens via YouTube <code>publishAt</code> and only when the owner sets <code>PUBLIC_AUTO_PUBLISH=true</code>.</p>`;
+  return html;
+}
 
 async function renderProviders(){
   const p = await j("/api/providers");
@@ -186,7 +240,7 @@ async function renderLogs(){
   return html;
 }
 
-const RENDERERS = { "Overview":renderOverview, "Story Queue":renderStories, "Production":renderProduction, "Videos":renderVideos, "Providers":renderProviders, "Accounts":renderAccounts, "Analytics":renderAnalytics, "Logs":renderLogs };
+const RENDERERS = { "Overview":renderOverview, "Story Queue":renderStories, "Production":renderProduction, "Videos":renderVideos, "Schedule":renderSchedule, "Providers":renderProviders, "Accounts":renderAccounts, "Analytics":renderAnalytics, "Logs":renderLogs };
 
 function buildNav(){
   const nav = document.getElementById("nav");

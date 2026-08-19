@@ -148,29 +148,30 @@ class ScriptEngine:
 
         Only trims when comfortably over target (>25%), and only on sentence
         boundaries so no clause is cut mid-way; never pads here (the
-        deterministic builder already pads up).
+        deterministic builder already pads up). Every section is trimmed in
+        proportion to its length and keeps at least its first sentence, so no
+        section — least of all the arrest/court-outcome one — is ever dropped
+        whole.
         """
-        import re as _re
-
         total = sum(len(t.split()) for _, t in sections)
-        if total <= target_words * 1.25 or not sections:
+        if total <= target_words * 1.25 or not sections or total == 0:
             return sections
-        budget = target_words
         out: list[tuple[str, str]] = []
         for name, text in sections:
-            if budget <= 0:
-                break
-            sents = _re.split(r"(?<=[.!?])\s+", text)
+            sents = [s for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+            if not sents:
+                out.append((name, text))
+                continue
+            share = max(len(sents[0].split()), round(target_words * len(text.split()) / total))
             kept, used = [], 0
             for s in sents:
                 w = len(s.split())
-                if kept and used + w > budget:
+                if kept and used + w > share:
                     break
                 kept.append(s)
                 used += w
-            budget -= used
-            out.append((name, " ".join(kept).strip() or text.split(".")[0] + "."))
-        return out or sections
+            out.append((name, " ".join(kept).strip()))
+        return out
 
     def _reword_anchor(self, text: str) -> str:
         # Compress the anchor into an original framing clause rather than quoting.
@@ -239,28 +240,25 @@ class ScriptEngine:
 
     def _pad_to_length(self, sections: list[tuple[str, str]], target: int) -> list[tuple[str, str]]:
         words = sum(len(t.split()) for _, t in sections)
+        # Per-section append counter drives the padding index, so each section
+        # cycles 0,1,2,… through the pool and consecutive additions to the SAME
+        # section always differ (no duplicated sentence in narration/captions),
+        # while padding can still grow without bound to reach any target length.
+        counts = [0] * len(sections)
         i = 0
-        # Prime with the padding already present so we never re-append a line a
-        # section ends with (avoids duplicated sentences in narration/captions).
-        used: list[set[str]] = [
-            {p.strip() for p in self._PADDING if p.strip() and text.rstrip().endswith(p.strip())}
-            for _, text in sections
-        ]
-        while words < target and i < 600:
+        while words < target and i < 2000:
             sec = i % len(sections)
             name, text = sections[sec]
-            # Pick the next padding line this section has not used yet.
-            choice = next(
-                (p for k in range(len(self._PADDING))
-                 if (p := self._PADDING[(i + k) % len(self._PADDING)]).strip() not in used[sec]),
-                None,
-            )
-            i += 1
-            if choice is None:  # this section already carries every padding line
-                continue
+            choice = self._PADDING[counts[sec] % len(self._PADDING)]
+            # Guard the one adjacency the counter can't see: a line the section
+            # already ends with before any padding was added.
+            if text.rstrip().endswith(choice.strip()):
+                counts[sec] += 1
+                choice = self._PADDING[counts[sec] % len(self._PADDING)]
             sections[sec] = (name, text + choice)
-            used[sec].add(choice.strip())
+            counts[sec] += 1
             words += len(choice.split())
+            i += 1
         return sections
 
     def _parse_sections(self, text: str) -> list[tuple[str, str]]:

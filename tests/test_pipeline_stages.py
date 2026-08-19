@@ -109,4 +109,3 @@ def test_script_length_tracks_target_minutes(monkeypatch):
     # Within ~20% of the target so rendered duration lands near 5 minutes.
     assert 0.8 * target <= script.word_count <= 1.25 * target
     assert report.ok
-    reload_settings()
