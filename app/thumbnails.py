@@ -39,11 +39,12 @@ class ThumbnailEngine:
 
     def generate(self, store: ProjectStore, *, title: str, subject_hint: str = "") -> ThumbCandidate:
         overlays = self._overlay_texts(title)
+        kickers = ["TRUE CRIME", "CASE FILE", "SOLVED"]
         candidates: list[ThumbCandidate] = []
         for i, (bg, accent, fg) in enumerate(_PALETTES):
             path = store.path(f"thumb_candidate_{i+1}.png")
             text = overlays[i % len(overlays)]
-            _render_thumb(path, text, bg, accent, fg)
+            _render_thumb(path, text, bg, accent, fg, kicker=kickers[i % len(kickers)])
             candidates.append(ThumbCandidate(path=path, overlay_text=text, scores=self._score(text)))
         best = max(candidates, key=lambda c: c.total)
         # Copy the winner to the canonical thumbnail.jpg.
@@ -77,17 +78,47 @@ class ThumbnailEngine:
         }
 
 
-def _render_thumb(path: Path, text: str, bg, accent, fg) -> None:
+def _render_thumb(path: Path, text: str, bg, accent, fg, *, kicker: str = "CASE FILE") -> None:
+    """Compose a 1280x720 thumbnail: vertical gradient, a kicker chip, a bold
+    drop-shadowed headline, and an accent underline. Real TrueType weight when a
+    system font is present; all generated (licence-clean)."""
     try:
         from PIL import Image, ImageDraw
 
-        img = Image.new("RGB", (1280, 720), bg)
+        from app.imaging import load_font
+
+        W, H = 1280, 720
+        img = Image.new("RGB", (W, H), bg)
         draw = ImageDraw.Draw(img)
-        # Accent bar + wrapped bold-ish text.
-        draw.rectangle([0, 620, 1280, 720], fill=accent)
-        wrapped = "\n".join(textwrap.wrap(text, width=16)) or " "
-        draw.multiline_text((70, 250), wrapped, fill=fg, spacing=18)
-        draw.rectangle([60, 60, 1220, 660], outline=accent, width=6)
+
+        # Vertical gradient from bg to a darker floor for depth.
+        floor = tuple(max(0, int(c * 0.45)) for c in bg)
+        for y in range(H):
+            t = y / H
+            row = tuple(int(bg[i] * (1 - t) + floor[i] * t) for i in range(3))
+            draw.line([(0, y), (W, y)], fill=row)
+
+        # Corner vignette-ish frame.
+        draw.rectangle([28, 28, W - 28, H - 28], outline=accent, width=4)
+
+        headline = load_font(96, "bold")
+        kfont = load_font(34, "bold")
+
+        # Kicker chip (top-left).
+        kx, ky = 70, 84
+        kw = int(draw.textlength(kicker, font=kfont))
+        draw.rectangle([kx - 16, ky - 10, kx + kw + 16, ky + 46], fill=accent)
+        draw.text((kx, ky), kicker, font=kfont, fill=bg)
+
+        # Headline, wrapped, with a soft drop shadow for mobile legibility.
+        wrapped = "\n".join(textwrap.wrap(text, width=14)) or " "
+        ty = 250
+        draw.multiline_text((74, ty + 4), wrapped, font=headline, fill=(0, 0, 0), spacing=14)
+        draw.multiline_text((70, ty), wrapped, font=headline, fill=fg, spacing=14)
+
+        # Accent underline near the bottom.
+        draw.rectangle([70, H - 120, 70 + 360, H - 104], fill=accent)
+
         img.save(path, "PNG")
     except Exception:
         from app.imaging import placeholder_png

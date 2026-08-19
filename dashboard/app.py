@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -301,6 +302,92 @@ def api_production() -> JSONResponse:
 @app.get("/api/schedule")
 def api_schedule() -> JSONResponse:
     return JSONResponse(_schedule())
+
+
+# --------------------------------------------------------------------------- #
+# In-dashboard "produce episode" trigger (one job at a time, spec §33)
+# --------------------------------------------------------------------------- #
+_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
+_produce_lock = threading.Lock()
+_produce_jobs: dict[str, dict] = {}
+
+
+def _producible_ids() -> dict[str, str]:
+    """Map of story ids that can be produced now -> a human label.
+
+    Shipped fixtures plus any existing project that already has a sources.json
+    (a selected/discovered story). Never accepts an arbitrary path.
+    """
+    out: dict[str, str] = {}
+    try:
+        from app.fixtures import FIXTURES
+
+        for sid, (cand, _srcs) in FIXTURES.items():
+            out[sid] = getattr(cand, "headline", "") or sid
+    except Exception:
+        pass
+    s = get_settings()
+    if s.projects_dir.exists():
+        for proj in sorted(s.projects_dir.iterdir()):
+            if proj.is_dir() and (proj / "sources.json").exists():
+                out.setdefault(proj.name, proj.name)
+    return out
+
+
+def _run_production(story: str) -> None:
+    from app.run import produce
+
+    job = _produce_jobs[story]
+    try:
+        outcome = produce(story)
+        job.update(
+            state="done",
+            finished_at=_now_iso(),
+            qc_passed=getattr(outcome, "qc_passed", None),
+            upload_status=getattr(outcome, "upload_status", None),
+        )
+    except Exception as exc:  # noqa: BLE001
+        job.update(state="error", finished_at=_now_iso(), error=str(exc)[:400])
+    finally:
+        _produce_lock.release()
+
+
+@app.get("/api/producible")
+def api_producible() -> JSONResponse:
+    running = [sid for sid, j in _produce_jobs.items() if j.get("state") == "running"]
+    return JSONResponse(
+        {
+            "stories": [{"story_id": k, "label": v} for k, v in _producible_ids().items()],
+            "busy": bool(running),
+            "running": running,
+        }
+    )
+
+
+@app.post("/api/produce/{story}")
+def api_produce(story: str) -> JSONResponse:
+    if not _ID_RE.match(story or "") or story not in _producible_ids():
+        raise HTTPException(status_code=404, detail="unknown or non-producible story")
+    # One production at a time (mirrors the pipeline's concurrency guard).
+    if not _produce_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="a production is already running")
+    _produce_jobs[story] = {"state": "running", "started_at": _now_iso(), "story_id": story}
+    threading.Thread(target=_run_production, args=(story,), daemon=True).start()
+    return JSONResponse({"started": True, "story_id": story})
+
+
+@app.get("/api/produce/{story}/status")
+def api_produce_status(story: str) -> JSONResponse:
+    if not _ID_RE.match(story or ""):
+        raise HTTPException(status_code=400, detail="invalid story id")
+    job = _produce_jobs.get(story, {"state": "idle", "story_id": story})
+    # Surface the live pipeline stage from the state store when available.
+    try:
+        rec = StateStore(get_settings()).all().get(story) or {}
+        job = {**job, "pipeline_state": rec.get("state")}
+    except Exception:
+        pass
+    return JSONResponse(job)
 
 
 # --------------------------------------------------------------------------- #

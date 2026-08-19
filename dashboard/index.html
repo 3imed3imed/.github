@@ -65,7 +65,7 @@
 <nav id="nav"></nav>
 <main id="main"></main>
 <script>
-const SCREENS = ["Overview","Story Queue","Production","Videos","Schedule","Providers","Accounts","Analytics","Logs"];
+const SCREENS = ["Overview","Story Queue","Production","Videos","Schedule","Produce","Providers","Accounts","Analytics","Logs"];
 let active = "Overview";
 
 async function j(u){ const r = await fetch(u); return r.json(); }
@@ -249,6 +249,50 @@ async function renderSchedule(){
   return html;
 }
 
+let _produceTimer=null;
+async function renderProduce(){
+  const p = await j("/api/producible");
+  const rows = (p.stories||[]).map(s=>`
+    <tr>
+      <td>${esc(s.label)}<div class="muted" style="font-size:11px">${esc(s.story_id)}</div></td>
+      <td style="text-align:right"><button class="btn primary" data-produce="${esc(s.story_id)}" ${p.busy?'disabled':''} onclick="startProduce('${esc(s.story_id)}')">Produce</button></td>
+    </tr>`).join("");
+  const busy = p.busy ? `<p class="msg">${pill('WARN','running')} ${esc((p.running||[]).join(', '))} — one episode is produced at a time.</p>` : '';
+  return `<h3 class="section-title">Produce an episode</h3>
+    <p class="muted">Runs the full offline pipeline (research → verify → script → render → QC) locally, ¥0. A finished master appears in <b>Videos</b>. One job at a time.</p>
+    ${busy}
+    <div class="overflow"><table><tr><th>Story</th><th></th></tr>${rows||'<tr><td colspan=2 class="muted">Nothing producible yet.</td></tr>'}</table></div>
+    <div id="produceStatus" class="epcard" style="display:none;margin-top:14px"></div>`;
+}
+
+window.startProduce = async function(id){
+  const box=document.getElementById('produceStatus');
+  document.querySelectorAll('[data-produce]').forEach(b=>b.disabled=true);
+  const r=await fetch('/api/produce/'+encodeURIComponent(id),{method:'POST'});
+  if(!r.ok){ const d=await r.json().catch(()=>({})); box.style.display='block'; box.innerHTML=`<span class="msg fail">Could not start: ${esc(d.detail||r.status)}</span>`; document.querySelectorAll('[data-produce]').forEach(b=>b.disabled=false); return; }
+  box.style.display='block'; box.innerHTML=`<b>${esc(id)}</b> <span class="msg">starting…</span>`;
+  pollProduce(id);
+};
+
+async function pollProduce(id){
+  if(_produceTimer) clearTimeout(_produceTimer);
+  const box=document.getElementById('produceStatus'); if(!box) return;
+  let s; try { s=await j('/api/produce/'+encodeURIComponent(id)+'/status'); } catch(e){ return; }
+  const stage = s.pipeline_state? ` · stage: ${esc(s.pipeline_state)}` : '';
+  if(s.state==='running'){
+    box.innerHTML=`<b>${esc(id)}</b> ${pill('WARN','running')}${stage} <span class="muted">— this takes a few minutes.</span>`;
+    _produceTimer=setTimeout(()=>pollProduce(id), 3000);
+  } else if(s.state==='done'){
+    box.innerHTML=`<b>${esc(id)}</b> ${pill('PASS','done')} · QC ${s.qc_passed?'✓':'—'} · upload: ${esc(s.upload_status||'render-only')}. Open it in <b>Videos</b>.`;
+    document.querySelectorAll('[data-produce]').forEach(b=>b.disabled=false);
+  } else if(s.state==='error'){
+    box.innerHTML=`<b>${esc(id)}</b> ${pill('FAIL','error')} <span class="msg fail">${esc(s.error||'failed')}</span>`;
+    document.querySelectorAll('[data-produce]').forEach(b=>b.disabled=false);
+  } else {
+    box.innerHTML=`<b>${esc(id)}</b> <span class="muted">idle</span>`;
+  }
+}
+
 async function renderProviders(){
   const p = await j("/api/providers");
   const rows = p.map(x=>`<tr><td>${esc(x.provider)}</td><td>${esc(x.kind)}</td><td>${pill(x.cost_class,x.cost_class)}</td><td>${esc(x.quota??"∞")}</td><td>${esc(x.requests)}</td><td>${esc(x.failures)}</td><td>${x.available?"yes":"no"}</td><td class="muted">${esc(x.fallback||"—")}</td><td>¥${esc(x.actual_cost_yen)}</td></tr>`).join("");
@@ -279,7 +323,7 @@ async function renderLogs(){
   return html;
 }
 
-const RENDERERS = { "Overview":renderOverview, "Story Queue":renderStories, "Production":renderProduction, "Videos":renderVideos, "Schedule":renderSchedule, "Providers":renderProviders, "Accounts":renderAccounts, "Analytics":renderAnalytics, "Logs":renderLogs };
+const RENDERERS = { "Overview":renderOverview, "Story Queue":renderStories, "Production":renderProduction, "Videos":renderVideos, "Schedule":renderSchedule, "Produce":renderProduce, "Providers":renderProviders, "Accounts":renderAccounts, "Analytics":renderAnalytics, "Logs":renderLogs };
 
 function buildNav(){
   const nav = document.getElementById("nav");

@@ -22,6 +22,15 @@ log = get_logger("render")
 _MAX_SCENE_RETRIES = 2
 
 
+def _card_label(narration: str, *, limit: int = 200) -> str:
+    """A text-card label: the opening of the narration, cut on a word boundary
+    (the card wraps it) so nothing is truncated mid-word."""
+    text = " ".join((narration or "").split())
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0] + "…"
+
+
 class RenderResult:
     def __init__(self, final_path: Path, scene_clips: list[Path], synthetic_used: bool):
         self.final_path = final_path
@@ -61,7 +70,13 @@ class Renderer:
         self._concat(clips, silent_video, store)
 
         final_path = store.path("final.mp4")
-        ffmpeg.mux_audio_video(silent_video, audio_master, final_path)
+        ffmpeg.mux_audio_video(
+            silent_video,
+            audio_master,
+            final_path,
+            target_lufs=self.settings.target_lufs,
+            film_look=self.settings.film_look_enabled,
+        )
         return RenderResult(final_path=final_path, scene_clips=clips, synthetic_used=synthetic_used)
 
     def _render_scene(self, scene: Scene, asset: Asset | None, clip: Path) -> bool:
@@ -77,20 +92,25 @@ class Renderer:
                     return outcome.value.synthetic
                 # Non-AI scene: Ken Burns over the still (owned or licensed).
                 if image_path and Path(image_path).exists():
-                    ffmpeg.ken_burns_clip(Path(image_path), clip, duration=scene.duration)
+                    # Alternate the motion direction by scene so it isn't monotonous.
+                    ffmpeg.ken_burns_clip(
+                        Path(image_path), clip, duration=scene.duration, zoom_out=bool(scene.scene_id % 2)
+                    )
                 else:
-                    ffmpeg.solid_card_clip(clip, duration=scene.duration, label=scene.narration[:60])
+                    ffmpeg.solid_card_clip(clip, duration=scene.duration, label=_card_label(scene.narration))
                 return False
             except Exception as exc:  # noqa: BLE001
                 last_err = exc
                 log.warning("scene %s attempt %d failed: %s", scene.scene_id, attempt + 1, exc)
         # Last resort so the whole render never dies on one scene.
-        ffmpeg.solid_card_clip(clip, duration=scene.duration, label=scene.narration[:60])
+        ffmpeg.solid_card_clip(clip, duration=scene.duration, label=_card_label(scene.narration))
         log.error("scene %s fell back to text card after failures: %s", scene.scene_id, last_err)
         return False
 
     def _concat(self, clips: list[Path], out: Path, store: ProjectStore) -> None:
-        # Re-encode each clip to a uniform format, then concat via demuxer.
+        # Re-encode each clip to a uniform format, then join. We prefer a
+        # crossfade between scenes for a documentary feel, and fall back to a
+        # hard-cut demuxer concat if xfade can't apply (e.g. a very short clip).
         normalized: list[Path] = []
         norm_dir = store.path("scenes")
         for clip in clips:
@@ -108,5 +128,12 @@ class Renderer:
                     ]
                 )
             normalized.append(norm)
+
+        if self.settings.transitions_enabled and len(normalized) >= 2:
+            try:
+                ffmpeg.xfade_concat(normalized, out, transition=self.settings.transition_seconds)
+                return
+            except Exception as exc:  # noqa: BLE001
+                log.warning("crossfade concat failed (%s); using hard-cut concat", exc)
         concat_file = norm_dir / "concat.txt"
         ffmpeg.concat_clips(normalized, out, concat_file)

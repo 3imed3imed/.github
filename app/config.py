@@ -141,6 +141,14 @@ class Settings:
     target_video_minutes: float = field(default_factory=lambda: _float("TARGET_VIDEO_MINUTES", 5.0))
     narration_wpm: int = field(default_factory=lambda: _int("NARRATION_WPM", 155))
 
+    # Picture polish. A crossfade between scenes and a subtle, generated film
+    # grade (gentle contrast, soft vignette, light grain, fade in/out) — both
+    # licence-clean and disable-able. Every effect degrades to a hard cut / no
+    # grade if the effect can't apply.
+    transitions_enabled: bool = field(default_factory=lambda: _bool("TRANSITIONS_ENABLED", True))
+    transition_seconds: float = field(default_factory=lambda: _float("TRANSITION_SECONDS", 0.5))
+    film_look_enabled: bool = field(default_factory=lambda: _bool("FILM_LOOK_ENABLED", True))
+
     def target_script_words(self) -> int:
         return max(500, int(self.target_video_minutes * self.narration_wpm))
 

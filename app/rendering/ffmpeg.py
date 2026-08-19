@@ -61,16 +61,31 @@ def to_wav(src: Path, dst: Path, sample_rate: int = 24000) -> None:
 
 def solid_card_clip(out_path: Path, *, duration: float, label: str = "", color: str = "0x14161a") -> None:
     """A dark text card — used for TEXT_CARD scenes and as the universal fallback
-    when no licensed still is available. Purely generated, license-clean."""
-    safe = _escape_drawtext(label)
-    vf = (
-        f"drawtext=text='{safe}':fontcolor=white:fontsize=44:"
-        f"x=(w-text_w)/2:y=(h-text_h)/2:line_spacing=12"
+    when no licensed still is available. Purely generated, license-clean.
+
+    The label is word-wrapped so a long line is never centred off-screen, drawn
+    with a system serif/sans face when available, over a subtle accent rule.
+    """
+    import textwrap
+
+    from app.imaging import find_font_file
+
+    lines = textwrap.wrap(label.strip(), width=34)[:6] or [" "]
+    text = _escape_drawtext("\n".join(lines))
+    fontsize = 46 if len(lines) <= 3 else 38
+    font = find_font_file("regular")
+    fontfile = f":fontfile='{font}'" if font else ""
+    draw = (
+        f"drawtext=text='{text}'{fontfile}:fontcolor=white:fontsize={fontsize}:"
+        f"x=(w-text_w)/2:y=(h-text_h)/2:line_spacing=14:"
+        # A thin accent rule under the block for a documentary lower-third feel.
+        f"borderw=0,"
+        f"drawbox=x=(iw-560)/2:y=ih-260:w=560:h=4:color=0xd24b4b@0.9:t=fill"
     )
     _run(
         [
             "-f", "lavfi", "-i", f"color=c={color}:s={WIDTH}x{HEIGHT}:d={duration:.2f}:r={FPS}",
-            "-vf", vf,
+            "-vf", draw,
             "-t", f"{duration:.2f}",
             "-pix_fmt", "yuv420p",
             str(out_path),
@@ -78,12 +93,20 @@ def solid_card_clip(out_path: Path, *, duration: float, label: str = "", color: 
     )
 
 
-def ken_burns_clip(image_path: Path, out_path: Path, *, duration: float) -> None:
-    """Slow zoom/pan over a still image (the AI-free motion fallback)."""
+def ken_burns_clip(image_path: Path, out_path: Path, *, duration: float, zoom_out: bool = False) -> None:
+    """Slow zoom/pan over a still image (the AI-free motion fallback).
+
+    ``zoom_out`` reverses the motion (starts pushed-in, eases back), so alternating
+    scenes don't all drift the same way and the sequence feels less mechanical.
+    """
     frames = max(1, int(duration * FPS))
+    if zoom_out:
+        z = "if(eq(on,1),1.25,max(zoom-0.0008,1.0))"
+    else:
+        z = "min(zoom+0.0008,1.25)"
     vf = (
         f"scale={WIDTH*2}:-1,"
-        f"zoompan=z='min(zoom+0.0008,1.25)':d={frames}:"
+        f"zoompan=z='{z}':d={frames}:"
         f"s={WIDTH}x{HEIGHT}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':fps={FPS},"
         f"format=yuv420p"
     )
@@ -110,15 +133,80 @@ def concat_clips(clip_paths: list[Path], out_path: Path, concat_file: Path) -> N
     )
 
 
-def mux_audio_video(video_path: Path, audio_path: Path, out_path: Path, *, target_lufs: float = -14.0) -> None:
+def xfade_concat(clip_paths: list[Path], out_path: Path, *, transition: float = 0.5) -> None:
+    """Concatenate clips with a crossfade between each, for a documentary feel.
+
+    Chains ``xfade`` across the (already uniform 1920x1080/30fps/yuv420p) clips.
+    Requires every clip to be comfortably longer than the transition; the caller
+    falls back to a hard-cut concat when that does not hold or xfade errors.
+    """
+    if len(clip_paths) < 2:
+        raise FFmpegError("xfade needs at least two clips")
+    durations = [probe_duration(p) or 0.0 for p in clip_paths]
+    if any(d <= transition + 0.2 for d in durations):
+        raise FFmpegError("a clip is too short for the crossfade")
+
+    inputs: list[str] = []
+    for p in clip_paths:
+        inputs += ["-i", str(p)]
+
+    steps: list[str] = []
+    prev = "[0:v]"
+    cum = durations[0]
+    for i in range(1, len(clip_paths)):
+        offset = cum - transition * i
+        label = "[vout]" if i == len(clip_paths) - 1 else f"[v{i}]"
+        steps.append(
+            f"{prev}[{i}:v]xfade=transition=fade:duration={transition:.2f}:offset={offset:.2f}{label}"
+        )
+        prev = label
+        cum += durations[i]
+    _run(
+        [
+            *inputs,
+            "-filter_complex", ";".join(steps),
+            "-map", "[vout]",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
+            "-r", str(FPS),
+            "-an",
+            str(out_path),
+        ]
+    )
+
+
+def _film_grade_chain(total: float | None) -> str:
+    """Subtle documentary grade: gentle contrast/saturation, a soft vignette, and
+    a fade in/out. All synthesised (licence-clean).
+
+    Deliberately no per-frame grain — temporal noise is high-entropy and makes
+    x264 balloon the bitrate/size at a constant CRF, so the picture polish here
+    stays compression-friendly.
+    """
+    chain = "eq=contrast=1.06:saturation=1.02:gamma=0.98,vignette=PI/5,fade=t=in:st=0:d=0.8"
+    if total and total > 2.0:
+        chain += f",fade=t=out:st={total - 0.8:.2f}:d=0.8"
+    return chain
+
+
+def mux_audio_video(
+    video_path: Path,
+    audio_path: Path,
+    out_path: Path,
+    *,
+    target_lufs: float = -14.0,
+    film_look: bool = True,
+) -> None:
     """Combine the silent video track with the narration+music master, applying
-    loudness normalisation toward the target integrated LUFS."""
+    loudness normalisation and (optionally) a subtle film grade to the picture."""
+    total = probe_duration(video_path) if film_look else None
+    vchain = _film_grade_chain(total) if film_look else "null"
     _run(
         [
             "-i", str(video_path),
             "-i", str(audio_path),
-            "-filter_complex", f"[1:a]loudnorm=I={target_lufs}:TP=-1.5:LRA=11[a]",
-            "-map", "0:v:0", "-map", "[a]",
+            "-filter_complex",
+            f"[0:v]{vchain}[v];[1:a]loudnorm=I={target_lufs}:TP=-1.5:LRA=11[a]",
+            "-map", "[v]", "-map", "[a]",
             "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
             "-r", str(FPS),
             "-c:a", "aac", "-b:a", "192k",

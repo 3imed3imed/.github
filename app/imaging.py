@@ -16,3 +16,44 @@ _PLACEHOLDER_PNG = bytes.fromhex(
 def placeholder_png(path: Path) -> None:
     """Write the minimal valid PNG to ``path``."""
     Path(path).write_bytes(_PLACEHOLDER_PNG)
+
+
+# Common install locations for the free Liberation / DejaVu families. We ship no
+# font ourselves (licence hygiene) but use a system TrueType face when present so
+# thumbnails and text cards render with real weight instead of Pillow's tiny
+# bitmap default. Ordered best-first (bold sans for headlines).
+_FONT_CANDIDATES = {
+    "bold": [
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+        "/Library/Fonts/Arial Bold.ttf",
+    ],
+    "regular": [
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+    ],
+}
+
+
+def find_font_file(weight: str = "bold") -> str | None:
+    """Absolute path to a system TrueType font of the given weight, or None."""
+    for candidate in _FONT_CANDIDATES.get(weight, []):
+        if Path(candidate).exists():
+            return candidate
+    return None
+
+
+def load_font(size: int, weight: str = "bold"):
+    """A Pillow font at ``size`` — a real TrueType face if one is installed,
+    otherwise Pillow's (small) default so callers still get a usable object."""
+    from PIL import ImageFont
+
+    path = find_font_file(weight)
+    if path:
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception:
+            pass
+    return ImageFont.load_default()

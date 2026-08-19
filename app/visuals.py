@@ -123,20 +123,63 @@ class VisualsCollector:
 
 
 def _render_card(target: Path, label: str) -> None:
-    """Render a dark documentary card with wrapped text using Pillow."""
+    """Render a dark documentary card: vertical gradient, an optional kicker
+    chip (``[ MAP ]`` etc.), and centred wrapped body text over an accent rule.
+
+    A real TrueType face is used when one is installed. Everything important
+    sits inside a safe area so the Ken Burns zoom never crops it, and the text is
+    horizontally centred so a long line is never pushed off-screen.
+    """
     try:
         import textwrap
 
         from PIL import Image, ImageDraw
 
-        img = Image.new("RGB", (1920, 1080), (18, 20, 26))
+        from app.imaging import load_font
+
+        W, H = 1920, 1080
+        bg, accent, fg = (18, 20, 26), (200, 60, 60), (232, 232, 236)
+
+        # Separate an optional "[ KICKER ]" prefix from the body text.
+        kicker = ""
+        body = label.strip()
+        if body.startswith("[") and "]" in body:
+            head, _, rest = body.partition("]")
+            kicker = head.lstrip("[").strip()
+            body = rest.strip()
+
+        img = Image.new("RGB", (W, H), bg)
         draw = ImageDraw.Draw(img)
-        wrapped = "\n".join(textwrap.wrap(label, width=42)) or " "
-        # Default bitmap font keeps this dependency-free.
-        draw.multiline_text(
-            (140, 420), wrapped, fill=(232, 232, 236), spacing=16
-        )
-        draw.line([(140, 380), (700, 380)], fill=(180, 60, 60), width=6)
+        floor = tuple(max(0, int(c * 0.5)) for c in bg)
+        for y in range(H):
+            t = y / H
+            draw.line([(0, y), (W, y)], fill=tuple(int(bg[i] * (1 - t) + floor[i] * t) for i in range(3)))
+
+        body_font = load_font(58, "regular")
+        kfont = load_font(34, "bold")
+
+        # Wrap and vertically centre the body within the safe area.
+        lines = textwrap.wrap(body, width=30)[:6] or [" "]
+        heights = []
+        for ln in lines:
+            box = draw.textbbox((0, 0), ln, font=body_font)
+            heights.append(box[3] - box[1])
+        line_gap = 20
+        block_h = sum(heights) + line_gap * (len(lines) - 1)
+        y = (H - block_h) // 2
+        if kicker:
+            kw = int(draw.textlength(kicker, font=kfont))
+            kx = (W - kw) // 2  # centred above the body block
+            draw.rectangle([kx - 16, y - 96, kx + kw + 16, y - 40], fill=accent)
+            draw.text((kx, y - 90), kicker, font=kfont, fill=bg)
+        for ln, h in zip(lines, heights, strict=True):
+            w = draw.textlength(ln, font=body_font)
+            x = (W - w) / 2
+            draw.text((x + 3, y + 3), ln, font=body_font, fill=(0, 0, 0))  # shadow
+            draw.text((x, y), ln, font=body_font, fill=fg)
+            y += h + line_gap
+
+        draw.rectangle([(W - 360) // 2, y + 24, (W + 360) // 2, y + 30], fill=accent)
         img.save(target, "PNG")
     except Exception:
         # Absolute fallback: a tiny valid PNG so rendering can proceed.
