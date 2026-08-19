@@ -293,4 +293,6 @@ def mix_audio_tracks(narration: Path, out_path: Path, *, bed: Path | None = None
 def _escape_drawtext(text: str) -> str:
     text = text.replace("\\", "").replace(":", "\\:").replace("'", "")
     text = text.replace("%", "\\%")
-    return text[:120]
+    # Roomy enough for a wrapped six-line card (solid_card_clip); the label is
+    # already length-capped by its caller.
+    return text[:400]

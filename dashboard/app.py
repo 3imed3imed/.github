@@ -371,8 +371,17 @@ def api_produce(story: str) -> JSONResponse:
     # One production at a time (mirrors the pipeline's concurrency guard).
     if not _produce_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="a production is already running")
+    # Bound the job history so a long-lived dashboard doesn't grow it forever.
+    if len(_produce_jobs) > 50:
+        for sid in [s for s, j in _produce_jobs.items() if j.get("state") != "running"][:25]:
+            _produce_jobs.pop(sid, None)
     _produce_jobs[story] = {"state": "running", "started_at": _now_iso(), "story_id": story}
-    threading.Thread(target=_run_production, args=(story,), daemon=True).start()
+    try:
+        threading.Thread(target=_run_production, args=(story,), daemon=True).start()
+    except Exception as exc:  # noqa: BLE001 — never leak the lock if the thread won't start
+        _produce_jobs[story] = {"state": "error", "story_id": story, "error": str(exc)[:200]}
+        _produce_lock.release()
+        raise HTTPException(status_code=500, detail="could not start production") from exc
     return JSONResponse({"started": True, "story_id": story})
 
 

@@ -58,6 +58,28 @@ def test_produce_runs_and_reports_done(settings, monkeypatch):
     assert done["upload_status"] == "dry-run"
 
 
+def test_produce_releases_lock_if_thread_fails_to_start(settings, monkeypatch):
+    import dashboard.app as dash
+
+    def _boom(*a, **k):
+        raise RuntimeError("no threads")
+
+    monkeypatch.setattr(dash.threading, "Thread", _boom)
+    c = _client()
+    r = c.post("/api/produce/fixture-genealogy-coldcase")
+    assert r.status_code == 500
+    # The lock must have been released — a normal produce can still start.
+    monkeypatch.undo()
+
+    class _O:
+        qc_passed = True
+        upload_status = "dry-run"
+
+    monkeypatch.setattr("app.run.produce", lambda story_id, settings=None: _O())
+    assert c.post("/api/produce/fixture-genealogy-coldcase").status_code == 200
+    _wait_state(c, "fixture-genealogy-coldcase", "done")
+
+
 def test_produce_is_single_flighted(settings, monkeypatch):
     import threading
 
