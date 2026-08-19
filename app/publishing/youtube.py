@@ -51,8 +51,9 @@ class YouTubeUploader:
         self.settings = settings or get_settings()
 
     def _oauth_ready(self) -> bool:
-        s = self.settings
-        return bool(s.youtube_client_id and s.youtube_client_secret and s.youtube_refresh_token)
+        from app.publishing.google_auth import oauth_ready
+
+        return oauth_ready(self.settings)
 
     def build_plan(
         self,
@@ -109,21 +110,12 @@ class YouTubeUploader:
 
     # -- real upload (only reached with libs + OAuth + UPLOAD_ENABLED) ------ #
     def _real_upload(self, plan: UploadPlan) -> UploadResult:  # pragma: no cover - network
-        from google.auth.transport.requests import Request
-        from google.oauth2.credentials import Credentials
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaFileUpload
 
-        s = self.settings
-        creds = Credentials(
-            token=None,
-            refresh_token=s.youtube_refresh_token,
-            client_id=s.youtube_client_id,
-            client_secret=s.youtube_client_secret,
-            token_uri="https://oauth2.googleapis.com/token",
-            scopes=["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube"],
-        )
-        creds.refresh(Request())
+        from app.publishing.google_auth import UPLOAD_SCOPES, build_credentials
+
+        creds = build_credentials(self.settings, UPLOAD_SCOPES)
         youtube = build("youtube", "v3", credentials=creds)
 
         status = {"privacyStatus": plan.privacy_status, "selfDeclaredMadeForKids": False}

@@ -57,11 +57,13 @@ pipeline stages, state/dedupe/secret-redaction, provider-failure/secret-scan,
   fully without it.
 - **Discovery feeds** depend on third-party RSS/JSON endpoints that occasionally
   change or rate-limit; each source fails soft.
-- **Analytics feedback loop is wired** — weekly analytics writes advisory
-  per-category weights that the ranker applies as a small, bounded (±3 pt) soft
-  bias (never overriding safety/fact rules or reviving rejected stories). It
-  still needs real YouTube Analytics performance data (an explicit integration
-  point in `AnalyticsEngine._collect_live`) before the weights are meaningful.
+- **Analytics loop is fully wired, end to end** — `AnalyticsEngine._collect_live`
+  now pulls per-video metrics from the YouTube Data + Analytics APIs (guarded:
+  returns `[]` without OAuth), maps each published video back to its story
+  category via the ledger, and weekly analytics writes advisory per-category
+  weights that the ranker applies as a small, bounded (±3 pt) soft bias (never
+  overriding safety/fact rules or reviving rejected stories). It needs a
+  populated channel with watch data before the weights become meaningful.
 - No music/ambience bed ships (licensing); drop a `bed.wav` per project to enable
   the ducking mix.
 

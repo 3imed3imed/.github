@@ -67,9 +67,101 @@ class AnalyticsEngine:
         return self._collect_live()
 
     def _collect_live(self) -> list[dict]:  # pragma: no cover - network
-        # Left as an explicit integration point; returns [] when unconfigured so
-        # analytics degrades gracefully rather than failing the weekly job.
-        return []
+        """Fetch recent-video performance via the YouTube Analytics API.
+
+        Returns [] (graceful degradation) when OAuth or the google libraries are
+        unavailable, so the weekly job never fails on missing credentials.
+        """
+        from app.publishing.google_auth import ANALYTICS_SCOPES, build_credentials, oauth_ready
+
+        if not oauth_ready(self.settings):
+            return []
+        try:
+            from googleapiclient.discovery import build
+        except Exception:
+            return []
+        try:
+            creds = build_credentials(self.settings, ANALYTICS_SCOPES)
+            data_api = build("youtube", "v3", credentials=creds)
+            analytics_api = build("youtubeAnalytics", "v2", credentials=creds)
+            videos = self._fetch_recent_videos(data_api)  # [{video_id, title}]
+            metrics = {v["video_id"]: self._fetch_video_metrics(analytics_api, v["video_id"]) for v in videos}
+            return self._normalize_performance(videos, metrics)
+        except Exception as exc:  # noqa: BLE001
+            from app.observability import get_logger
+
+            get_logger("analytics").warning("live analytics collection failed: %s", exc)
+            return []
+
+    def _fetch_recent_videos(self, data_api, limit: int = 25) -> list[dict]:  # pragma: no cover - network
+        # The channel's own recent uploads (mine=true avoids needing a channel id).
+        resp = (
+            data_api.search()
+            .list(part="snippet", forMine=True, type="video", order="date", maxResults=limit)
+            .execute()
+        )
+        out = []
+        for item in resp.get("items", []):
+            vid = item.get("id", {}).get("videoId")
+            if vid:
+                out.append({"video_id": vid, "title": item.get("snippet", {}).get("title", "")})
+        return out
+
+    def _fetch_video_metrics(self, analytics_api, video_id: str) -> dict:  # pragma: no cover - network
+        resp = (
+            analytics_api.reports()
+            .query(
+                ids="channel==MINE",
+                startDate="2005-01-01",
+                endDate=datetime.now(timezone.utc).date().isoformat(),
+                metrics="views,estimatedMinutesWatched,averageViewPercentage,likes,comments,subscribersGained",
+                filters=f"video=={video_id}",
+            )
+            .execute()
+        )
+        cols = [c["name"] for c in resp.get("columnHeaders", [])]
+        rows = resp.get("rows", [])
+        if not rows:
+            return {}
+        return dict(zip(cols, rows[0], strict=False))
+
+    def _normalize_performance(self, videos: list[dict], metrics: dict[str, dict]) -> list[dict]:
+        """Pure mapping of raw video + metric data into performance records.
+
+        Category is recovered by matching the published video id back to the
+        story ledger and classifying its headline with the same vocabulary the
+        ranker uses, so the analytics -> selection loop is category-consistent.
+        """
+        from app.dedupe import PublishedLedger
+        from app.models import Candidate
+        from app.ranking import category_for
+
+        ledger_entries = PublishedLedger(self.settings)._load()
+        by_video = {e.get("video_id"): e for e in ledger_entries if e.get("video_id")}
+
+        records: list[dict] = []
+        for v in videos:
+            vid = v["video_id"]
+            m = metrics.get(vid, {})
+            entry = by_video.get(vid, {})
+            headline = entry.get("headline", v.get("title", ""))
+            category = category_for(
+                Candidate(id=vid, headline=headline, people=entry.get("people", []))
+            )
+            records.append(
+                {
+                    "video_id": vid,
+                    "title": v.get("title", ""),
+                    "category": category,
+                    "views": float(m.get("views", 0) or 0),
+                    "avg_percentage_viewed": float(m.get("averageViewPercentage", 0) or 0),
+                    "estimated_minutes_watched": float(m.get("estimatedMinutesWatched", 0) or 0),
+                    "likes": float(m.get("likes", 0) or 0),
+                    "comments": float(m.get("comments", 0) or 0),
+                    "subscribers_gained": float(m.get("subscribersGained", 0) or 0),
+                }
+            )
+        return records
 
     def analyze(self, videos: list[dict]) -> AnalyticsReport:
         report = AnalyticsReport(
