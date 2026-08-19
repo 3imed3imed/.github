@@ -49,10 +49,15 @@ automatically.
 
 | Stage | Command | What to verify |
 |-------|---------|----------------|
-| **A** research only | `python -m app.pipeline --stage-a` (×3 stories) | selection reasons, verification, scores |
-| **B** full videos, no upload | `python -m app.run --story <id>` (×3) | facts, render, audio, visuals, copyright manifests |
-| **C** private uploads | set `UPLOAD_ENABLED=true`, rerun | OAuth, processing, thumbnail, captions, metadata, AI disclosure — videos are **private** on your channel |
+| **A** research only | `python -m app.cli validate --stage a` | selection reasons, verification, scores (no video) |
+| **B** full videos, no upload | `python -m app.cli validate --stage b` | facts, render, audio, visuals, copyright manifests |
+| **C** private uploads | set `UPLOAD_ENABLED=true`, then `python -m app.cli validate --stage c` | OAuth, processing, thumbnail, captions, metadata, AI disclosure — videos are **private** on your channel |
 | **D** public | owner sets `PUBLIC_AUTO_PUBLISH=true` | only after A–C look correct |
+
+Each stage prints a JSON report and exits non-zero if it fails, so it doubles as
+a CI/pre-flight gate. Pass `--stories id1,id2,id3` to validate specific stories
+(defaults to the shipped fixtures). Stage C **refuses to run** unless the owner
+has set `UPLOAD_ENABLED=true`, and never publishes publicly.
 
 ## Cost & safety monitoring
 

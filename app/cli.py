@@ -19,6 +19,9 @@ def main(argv: list[str] | None = None) -> int:
     p_pipe.add_argument("--select-only", action="store_true")
     sub.add_parser("analytics", help="Run weekly analytics")
     sub.add_parser("cleanup", help="Prune intermediate render files")
+    p_val = sub.add_parser("validate", help="Run a validation stage (A/B/C)")
+    p_val.add_argument("--stage", required=True, choices=["a", "b", "c"])
+    p_val.add_argument("--stories", default="")
 
     args = parser.parse_args(argv)
 
@@ -53,6 +56,13 @@ def main(argv: list[str] | None = None) -> int:
         from app.cleanup import main as m
 
         return m([])
+    if args.command == "validate":
+        extra = ["--stage", args.stage]
+        if args.stories:
+            extra += ["--stories", args.stories]
+        from app.validate import main as m
+
+        return m(extra)
     return 1
 
 
