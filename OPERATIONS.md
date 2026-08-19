@@ -24,11 +24,17 @@ python -m app.pipeline --select-only
 uvicorn dashboard.app:app --port 8080   # http://localhost:8080
 ```
 The dashboard has Overview, Story Queue, Production, **Videos (Episode Studio)**,
-Providers, Accounts, Analytics and Logs screens. The Episode Studio streams each
-finished 1080p master (`/api/video/<story>`), shows its script/sources/QC, serves
-its captions, and lets you edit the title & description inline — Save writes back
-to `metadata.json` / `description.txt`. Path traversal is rejected; the video
-master itself is never modified by an edit.
+**Schedule**, Providers, Accounts, Analytics and Logs screens. The Episode Studio
+streams each finished 1080p master (`/api/video/<story>`, HTTP Range so you can
+seek), plays it with **English subtitles** (a WebVTT track from
+`/api/captions/<story>/vtt`), shows its script/sources/QC, serves its captions,
+and lets you edit the title & description inline — Save writes back to
+`metadata.json` / `description.txt`. Path traversal is rejected; the video master
+itself is never modified by an edit. The **Schedule** screen renders the daily
+production pipeline from `config/schedule.yml` (each stage's next run in the
+configured timezone), the weekly analytics slot, the guardrails, and a
+publication queue showing where each rendered episode sits and its privacy —
+reinforcing that nothing publishes publicly without the owner's opt-in.
 
 ## Stop the system
 
