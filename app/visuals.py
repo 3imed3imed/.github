@@ -139,11 +139,7 @@ def _render_card(target: Path, label: str) -> None:
         draw.line([(140, 380), (700, 380)], fill=(180, 60, 60), width=6)
         img.save(target, "PNG")
     except Exception:
-        # Absolute fallback: a tiny valid PNG (1x1) so rendering can proceed.
-        target.write_bytes(
-            bytes.fromhex(
-                "89504e470d0a1a0a0000000d494844520000000100000001080200000090"
-                "7753de0000000c49444154789c6360000002000100ffff03000006000557"
-                "bfabd40000000049454e44ae426082"
-            )
-        )
+        # Absolute fallback: a tiny valid PNG so rendering can proceed.
+        from app.imaging import placeholder_png
+
+        placeholder_png(target)

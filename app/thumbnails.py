@@ -90,13 +90,9 @@ def _render_thumb(path: Path, text: str, bg, accent, fg) -> None:
         draw.rectangle([60, 60, 1220, 660], outline=accent, width=6)
         img.save(path, "PNG")
     except Exception:
-        path.write_bytes(
-            bytes.fromhex(
-                "89504e470d0a1a0a0000000d494844520000000100000001080200000090"
-                "7753de0000000c49444154789c6360000002000100ffff03000006000557"
-                "bfabd40000000049454e44ae426082"
-            )
-        )
+        from app.imaging import placeholder_png
+
+        placeholder_png(path)
 
 
 def _to_jpg(src: Path, dst: Path) -> None:

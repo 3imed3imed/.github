@@ -183,14 +183,12 @@ class ScriptEngine:
 
     def _salient(self, text: str, *, k: int = 3) -> list[str]:
         # Pick a few distinctive, non-stopword terms to anchor a reworded clause.
-        import re as _re
-
         stop = {
             "the", "a", "an", "of", "to", "in", "on", "and", "or", "for", "with", "was",
             "were", "is", "are", "that", "this", "from", "had", "has", "been",
             "which", "who", "later", "after", "before", "into", "through", "multiple",
         }
-        words = [w for w in _re.findall(r"[A-Za-z][A-Za-z\-]{3,}", text) if w.lower() not in stop]
+        words = [w for w in re.findall(r"[A-Za-z][A-Za-z\-]{3,}", text) if w.lower() not in stop]
         seen: list[str] = []
         for w in words:
             if w.lower() not in {s.lower() for s in seen}:
