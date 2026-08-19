@@ -59,9 +59,12 @@ class PublishedLedger:
     def is_duplicate(self, candidate: Candidate, *, threshold: float = 0.6) -> bool:
         entries = self._load()
         toks = _tokens(candidate.headline + " " + " ".join(candidate.people))
-        urls = {candidate.url}
+        # Only match on non-empty URLs — Candidate.url defaults to "" and two
+        # different urlless stories must not collide on the empty string.
+        urls = {u for u in {candidate.url} if u}
         for e in entries:
-            if urls & set(e.get("urls", [])):
+            entry_urls = {u for u in e.get("urls", []) if u}
+            if urls & entry_urls:
                 return True
             if jaccard(toks, set(e.get("tokens", []))) >= threshold:
                 return True

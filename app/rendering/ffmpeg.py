@@ -187,9 +187,13 @@ def mix_audio_tracks(narration: Path, out_path: Path, *, bed: Path | None = None
             [
                 "-i", str(narration), "-i", str(bed),
                 "-filter_complex",
+                # Split the narration so the same stream can key the sidechain AND be
+                # mixed back in — an explicit asplit is required by stricter/older
+                # ffmpeg builds that will not auto-split a demuxer pad used twice.
+                "[0:a]asplit=2[voice][key];"
                 "[1:a]volume=0.25[bed];"
-                "[bed][0:a]sidechaincompress=threshold=0.03:ratio=8:attack=5:release=250[ducked];"
-                "[0:a][ducked]amix=inputs=2:duration=first:dropout_transition=2[out]",
+                "[bed][key]sidechaincompress=threshold=0.03:ratio=8:attack=5:release=250[ducked];"
+                "[voice][ducked]amix=inputs=2:duration=first:dropout_transition=2[out]",
                 "-map", "[out]",
                 str(out_path),
             ]

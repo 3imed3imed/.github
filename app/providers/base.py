@@ -141,8 +141,12 @@ class ProviderChain(Generic[T]):
     """
 
     def __init__(self, providers: list[Provider[T]], on_alert: Callable[[str], None] | None = None):
-        # Free providers first, then free-tier, then (blocked) paid — stable within class.
-        order = {CostClass.FREE: 0, CostClass.FREE_TIER: 1, CostClass.PAID: 2}
+        # Only PAID is reordered to the very end (it is blocked by default); FREE and
+        # FREE_TIER keep their builder-supplied order. Builders list the preferred
+        # real providers first and the always-available offline fallback last, so a
+        # stable sort must NOT hoist the (FREE) offline fallback above the (FREE_TIER)
+        # real providers — doing so silently disables every configured API.
+        order = {CostClass.FREE: 0, CostClass.FREE_TIER: 0, CostClass.PAID: 1}
         self.providers = sorted(providers, key=lambda p: order[p.cost_class])
         self.on_alert = on_alert
 

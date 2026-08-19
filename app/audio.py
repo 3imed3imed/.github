@@ -65,8 +65,15 @@ class AudioStage:
             try:
                 ffmpeg.generate_ambient_bed(bed, duration=narration_len)
             except Exception:
-                bed = audio_dir / "bed.wav"  # if generation fails, mix runs without it
-        ffmpeg.mix_audio_tracks(narration_master, master, bed=bed if bed.exists() else None)
+                # Remove any partial/corrupt file so the mix degrades to narration-only.
+                bed.unlink(missing_ok=True)
+        use_bed = bed if bed.exists() else None
+        try:
+            ffmpeg.mix_audio_tracks(narration_master, master, bed=use_bed)
+        except Exception:
+            # Never fail the whole production on the optional bed mix — fall back to
+            # a straight narration master.
+            ffmpeg.mix_audio_tracks(narration_master, master, bed=None)
         total = ffmpeg.probe_duration(master) or sum(per_scene.values())
         return AudioResult(master=master, per_scene=per_scene, provider=provider, total=total)
 
