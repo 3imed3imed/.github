@@ -19,10 +19,16 @@ python -m app.pipeline --select-only
 (`.github/workflows/daily-production.yml`) or via **Run workflow**
 (workflow_dispatch). The `Manual Production` workflow produces a specific story.
 
-**Dashboard:**
+**Dashboard + Episode Studio:**
 ```bash
 uvicorn dashboard.app:app --port 8080   # http://localhost:8080
 ```
+The dashboard has Overview, Story Queue, Production, **Videos (Episode Studio)**,
+Providers, Accounts, Analytics and Logs screens. The Episode Studio streams each
+finished 1080p master (`/api/video/<story>`), shows its script/sources/QC, serves
+its captions, and lets you edit the title & description inline — Save writes back
+to `metadata.json` / `description.txt`. Path traversal is rejected; the video
+master itself is never modified by an edit.
 
 ## Stop the system
 

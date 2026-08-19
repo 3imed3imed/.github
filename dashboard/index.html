@@ -28,6 +28,22 @@
   .section-title { margin:0 0 12px; font-size:15px; }
   .muted { color:var(--muted); }
   .overflow { overflow-x:auto; }
+  .epcard { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .ephead { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .eptitle { font-weight:600; font-size:14px; }
+  .btn { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:7px 12px; font-size:13px; cursor:pointer; }
+  .btn:hover { border-color:var(--accent); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.ghost { color:var(--muted); }
+  .studio { margin-top:12px; }
+  .studio:empty { margin:0; }
+  .player { width:100%; max-width:760px; border-radius:10px; background:#000; display:block; aspect-ratio:16/9; }
+  .edit { display:flex; flex-direction:column; gap:6px; max-width:760px; margin-top:12px; }
+  .edit label { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); }
+  .edit input, .edit textarea { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:9px 10px; font:inherit; font-size:13px; width:100%; }
+  .edit textarea { resize:vertical; line-height:1.5; }
+  .editbar { display:flex; align-items:center; gap:10px; margin-top:4px; }
+  .msg { font-size:12px; } .msg.ok { color:var(--ok); } .msg.fail { color:var(--fail); }
 </style>
 </head>
 <body>
@@ -96,11 +112,49 @@ async function renderProduction(){
 }
 
 async function renderVideos(){
-  const s = await j("/api/stories");
-  const done = Object.values(s).filter(r=>["ready","uploaded","scheduled","published"].includes(r.state));
-  const rows = done.map(r=>`<tr><td>${esc(r.story_id)}</td><td>${pill("",r.state)}</td></tr>`).join("");
-  return `<h3 class="section-title">Videos</h3><div class="overflow"><table><tr><th>Story</th><th>State</th></tr>${rows||'<tr><td colspan=2 class="muted">No finished videos yet</td></tr>'}</table></div>`;
+  const p = await j("/api/production");
+  const eps = p.filter(r=>r.has_final);
+  if(!eps.length) return `<h3 class="section-title">Episode Studio</h3><p class="muted">No rendered episodes yet. Produce one with <code>python -m app.run --story &lt;id&gt;</code>.</p>`;
+  const cards = eps.map(r=>`
+    <div class="epcard">
+      <div class="ephead">
+        <div><div class="eptitle">${esc(r.title||r.story_id)}</div>
+          <div class="muted" style="font-size:12px">${esc(r.story_id)} · ${r.qc_passed?pill("PASS","QC ✓"):pill("FAIL","QC ✗")} · ${esc(r.upload_status||"render-only")}</div></div>
+        <button class="btn" onclick="openStudio('${esc(r.story_id)}')">▶ Watch &amp; edit</button>
+      </div>
+      <div class="studio" id="studio-${esc(r.story_id)}"></div>
+    </div>`).join("");
+  return `<h3 class="section-title">Episode Studio</h3><p class="muted">Watch each full 1080p master and edit its title &amp; description — saved changes write back to disk.</p>${cards}`;
 }
+
+window.openStudio = async function(id){
+  const host=document.getElementById('studio-'+id);
+  if(host.dataset.open){ host.innerHTML=''; host.dataset.open=''; return; }
+  host.dataset.open='1'; host.innerHTML='<p class="muted">Loading…</p>';
+  const u=encodeURIComponent(id);
+  const e=await j('/api/episode/'+u);
+  host.innerHTML=`
+    <video controls preload="metadata" class="player" src="/api/video/${u}"></video>
+    <div class="edit">
+      <label>Title</label>
+      <input id="t-${id}" value="${esc(e.title)}" maxlength="100" />
+      <label>Description</label>
+      <textarea id="d-${id}" rows="9">${esc(e.description)}</textarea>
+      <div class="editbar"><button class="btn primary" onclick="saveEpisode('${id}')">Save changes</button>
+        <a class="btn ghost" href="/api/captions/${u}" target="_blank">View captions</a>
+        <span id="msg-${id}" class="msg muted"></span></div>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:6px">${e.script_words} words · ${e.storyboard_scenes} scenes · ${(e.sources||[]).length} sources · AI media: ${e.synthetic_media?'yes':'no'}</div>`;
+};
+
+window.saveEpisode = async function(id){
+  const title=document.getElementById('t-'+id).value;
+  const description=document.getElementById('d-'+id).value;
+  const msg=document.getElementById('msg-'+id); msg.textContent='Saving…';
+  const r=await fetch('/api/episode/'+encodeURIComponent(id)+'/metadata',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,description})});
+  if(r.ok){ const d=await r.json(); msg.textContent='Saved · '+d.changed.join(', '); msg.className='msg ok'; }
+  else { const d=await r.json().catch(()=>({})); msg.textContent='Error: '+(d.detail||r.status); msg.className='msg fail'; }
+};
 
 async function renderProviders(){
   const p = await j("/api/providers");
