@@ -32,8 +32,26 @@ def test_normalize_performance_maps_category_via_ledger(settings):
     assert by_id["VID123"]["category"] == "fraud"
     assert by_id["VID123"]["avg_percentage_viewed"] == 55.0
     assert by_id["VID123"]["views"] == 1000.0
-    # Unknown video falls back to classifying its own title (heist).
-    assert by_id["VID999"]["category"] == "heist"
+    # A video NOT in the ledger is bucketed 'other' — not classified from its
+    # marketing title (which would mislabel and skew the weights).
+    assert by_id["VID999"]["category"] == "other"
+
+
+def test_parse_metrics_rows_keys_by_video():
+    from app.analytics import AnalyticsEngine
+
+    resp = {
+        "columnHeaders": [
+            {"name": "video"},
+            {"name": "views"},
+            {"name": "averageViewPercentage"},
+        ],
+        "rows": [["VIDa", 100, 44.5], ["VIDb", 20, 10.0]],
+    }
+    parsed = AnalyticsEngine._parse_metrics_rows(resp)
+    assert set(parsed) == {"VIDa", "VIDb"}
+    assert parsed["VIDa"]["views"] == 100
+    assert "video" not in parsed["VIDa"]  # the dimension is used as the key
 
 
 def test_normalize_feeds_analyze_and_biases_selection(settings):

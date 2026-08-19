@@ -70,6 +70,23 @@ def test_qc_flags_claim_citing_unknown_source(settings):
     assert gate.run(claims=good, sources_ids={"S01", "S02"}, **base).passed
 
 
+def test_qc_orphan_check_with_empty_source_set(settings):
+    from app.models import Asset, Claim
+    from app.qc import QCGate
+
+    asset = Asset(asset_id="a1", provider="generated", license="own", scene_id=1)
+    gate = QCGate(settings)
+    claims = [Claim(claim_id="C1", claim="x", status="CHARGED", sources=["S99"])]
+    base = dict(
+        title="t", description="d", script_text="clean", scenes=[], assets=[asset],
+        claims=claims, originality_ok=True, verified=True,
+    )
+    # Known-but-empty source set -> a claim citing phantom ids is an orphan.
+    assert not gate.run(sources_ids=set(), **base).passed
+    # Unknown source set (None) -> fall back to weak "has any id" check -> passes.
+    assert gate.run(sources_ids=None, **base).passed
+
+
 def test_qc_rejects_invalid_status(settings):
     from app.models import Asset, Claim
     from app.qc import QCGate

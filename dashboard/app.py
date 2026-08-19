@@ -92,6 +92,7 @@ def _production() -> list[dict]:
                 "story_id": proj.name,
                 "stage": run.get("stage", ""),
                 "status": run.get("status", ""),
+                "finished_at": run.get("finished_at", ""),
                 "elapsed_time": run.get("elapsed_time", 0),
                 "actual_cost": run.get("actual_cost", 0),
                 "synthetic_media": run.get("synthetic_media_used", False),
@@ -103,8 +104,9 @@ def _production() -> list[dict]:
                 "has_final": (proj / "final.mp4").exists(),
             }
         )
-    # Most recently finished first.
-    out.sort(key=lambda r: r.get("status") == "success", reverse=True)
+    # Most recently finished first (unfinished runs, with empty finished_at,
+    # sort to the bottom).
+    out.sort(key=lambda r: r.get("finished_at") or "", reverse=True)
     return out
 
 

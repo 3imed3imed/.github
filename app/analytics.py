@@ -85,7 +85,7 @@ class AnalyticsEngine:
             data_api = build("youtube", "v3", credentials=creds)
             analytics_api = build("youtubeAnalytics", "v2", credentials=creds)
             videos = self._fetch_recent_videos(data_api)  # [{video_id, title}]
-            metrics = {v["video_id"]: self._fetch_video_metrics(analytics_api, v["video_id"]) for v in videos}
+            metrics = self._fetch_all_metrics(analytics_api, [v["video_id"] for v in videos])
             return self._normalize_performance(videos, metrics)
         except Exception as exc:  # noqa: BLE001
             from app.observability import get_logger
@@ -107,30 +107,51 @@ class AnalyticsEngine:
                 out.append({"video_id": vid, "title": item.get("snippet", {}).get("title", "")})
         return out
 
-    def _fetch_video_metrics(self, analytics_api, video_id: str) -> dict:  # pragma: no cover - network
+    #: Earliest date the YouTube Analytics API accepts (data starts 2008-07-01).
+    _ANALYTICS_FLOOR = "2008-07-01"
+
+    def _fetch_all_metrics(self, analytics_api, video_ids: list[str]) -> dict[str, dict]:  # pragma: no cover - network
+        """One batched Analytics query for all videos, keyed by the video
+        dimension — a single round-trip instead of one per video."""
+        if not video_ids:
+            return {}
         resp = (
             analytics_api.reports()
             .query(
                 ids="channel==MINE",
-                startDate="2005-01-01",
+                startDate=self._ANALYTICS_FLOOR,
                 endDate=datetime.now(timezone.utc).date().isoformat(),
                 metrics="views,estimatedMinutesWatched,averageViewPercentage,likes,comments,subscribersGained",
-                filters=f"video=={video_id}",
+                dimensions="video",
+                filters="video==" + ",".join(video_ids[:200]),
+                maxResults=200,
             )
             .execute()
         )
+        return self._parse_metrics_rows(resp)
+
+    @staticmethod
+    def _parse_metrics_rows(resp: dict) -> dict[str, dict]:
+        """Pure parse of an Analytics ``dimensions=video`` response into
+        ``{video_id: {metric: value}}``."""
         cols = [c["name"] for c in resp.get("columnHeaders", [])]
-        rows = resp.get("rows", [])
-        if not rows:
-            return {}
-        return dict(zip(cols, rows[0], strict=False))
+        out: dict[str, dict] = {}
+        for row in resp.get("rows", []):
+            rec = dict(zip(cols, row, strict=False))
+            vid = rec.pop("video", None)
+            if vid:
+                out[str(vid)] = rec
+        return out
 
     def _normalize_performance(self, videos: list[dict], metrics: dict[str, dict]) -> list[dict]:
         """Pure mapping of raw video + metric data into performance records.
 
         Category is recovered by matching the published video id back to the
-        story ledger and classifying its headline with the same vocabulary the
-        ranker uses, so the analytics -> selection loop is category-consistent.
+        story ledger and classifying its *story headline* with the same
+        vocabulary the ranker uses, so the analytics -> selection loop is
+        category-consistent. Videos not found in the ledger are bucketed as
+        ``other`` rather than classified from their marketing YouTube title,
+        which would mislabel them and skew the per-category weights.
         """
         from app.dedupe import PublishedLedger
         from app.models import Candidate
@@ -143,11 +164,13 @@ class AnalyticsEngine:
         for v in videos:
             vid = v["video_id"]
             m = metrics.get(vid, {})
-            entry = by_video.get(vid, {})
-            headline = entry.get("headline", v.get("title", ""))
-            category = category_for(
-                Candidate(id=vid, headline=headline, people=entry.get("people", []))
-            )
+            entry = by_video.get(vid)
+            if entry:
+                category = category_for(
+                    Candidate(id=vid, headline=entry.get("headline", ""), people=entry.get("people", []))
+                )
+            else:
+                category = "other"
             records.append(
                 {
                     "video_id": vid,

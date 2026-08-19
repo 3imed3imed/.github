@@ -46,7 +46,7 @@ class QCGate:
         scenes: list[Scene],
         claims: list[Claim],
         assets: list[Asset],
-        sources_ids: set[str],
+        sources_ids: set[str] | None,
         originality_ok: bool,
         verified: bool,
     ) -> QCResult:
@@ -71,9 +71,13 @@ class QCGate:
         def _is_orphan(c: Claim) -> bool:
             if not c.sources:
                 return True
-            if sources_ids:
-                return not (set(c.sources) & sources_ids)
-            return False
+            # Only when the caller does not know the source set (None) do we fall
+            # back to the weaker "has any id" check. A provided set — even an
+            # empty one — means we can verify the ids exist, so a claim citing
+            # only unknown ids is an orphan.
+            if sources_ids is None:
+                return False
+            return not (set(c.sources) & sources_ids)
 
         orphans = [c.claim_id for c in claims if _is_orphan(c)]
         result.orphan_claims = orphans
