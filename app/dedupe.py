@@ -70,7 +70,7 @@ class PublishedLedger:
                 return True
         return False
 
-    def add(self, candidate: Candidate, *, video_id: str = "") -> None:
+    def add(self, candidate: Candidate, *, video_id: str = "", title: str = "") -> None:
         entries = self._load()
         entries.append(
             {
@@ -80,6 +80,7 @@ class PublishedLedger:
                 "urls": [candidate.url],
                 "tokens": sorted(_tokens(candidate.headline + " " + " ".join(candidate.people))),
                 "video_id": video_id,
+                "title": title,
             }
         )
         self._save(entries)

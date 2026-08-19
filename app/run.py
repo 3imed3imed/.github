@@ -265,7 +265,7 @@ def produce(story_id: str, settings: Settings | None = None) -> ProductionOutcom
         state.transition(story_id, ProductionState.UPLOADED, note=upload_result.detail)
         state.transition(story_id, ProductionState.SCHEDULED, note=f"publishAt={plan.publish_at}")
     if upload_result.video_id:
-        PublishedLedger(settings).add(candidate, video_id=upload_result.video_id)
+        PublishedLedger(settings).add(candidate, video_id=upload_result.video_id, title=best_title.text)
 
     tracker.finish("success")
     tracker.write(project.path("run_report.json"))
