@@ -130,6 +130,9 @@ class Settings:
     # TTS
     tts_provider: str = field(default_factory=lambda: os.getenv("TTS_PROVIDER", "edge"))
     tts_voice: str = field(default_factory=lambda: os.getenv("TTS_VOICE", "en-US-ChristopherNeural"))
+    # Offline fallback voice (espeak-ng) — a real but robotic voice used when the
+    # neural voice can't be reached; keeps an offline render audible.
+    espeak_voice: str = field(default_factory=lambda: os.getenv("ESPEAK_VOICE", "en-us+m3"))
 
     # Music/ambience bed: a subtle, procedurally-generated, license-clean pad,
     # auto-ducked under narration. Disable with MUSIC_BED_ENABLED=false.
