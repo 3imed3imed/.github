@@ -1,0 +1,33 @@
+name: Weekly Analytics
+
+on:
+  schedule:
+    # Sunday 08:00 JST == Saturday 23:00 UTC.
+    - cron: "0 23 * * 6"
+  workflow_dispatch:
+
+jobs:
+  analytics:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Tokyo
+      ALLOW_PAID_SERVICES: "false"
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+      YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[youtube]"
+      - name: Run weekly analytics (advisory weights only; safety rules untouched)
+        run: python -m app.cli analytics
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: analytics
+          path: data/selection_weights.json
+          if-no-files-found: ignore

@@ -1,0 +1,23 @@
+# Production schedule (Asia/Tokyo). All times are configurable.
+# GitHub Actions cron runs in UTC; the workflow files convert from JST.
+# JST is UTC+9, so subtract 9 hours for the cron expressions.
+timezone: Asia/Tokyo
+
+daily:
+  discover:        "00:30"   # discover stories
+  verify_score:    "01:00"   # verify + score
+  select_winner:   "01:30"   # select winner
+  script_board:    "02:00"   # script + storyboard
+  assets:          "02:30"   # asset generation/collection
+  render:          "04:30"   # render
+  qc:              "05:30"   # QC
+  upload:          "06:00"   # upload
+  publish:         "07:00"   # scheduled publication (publishAt)
+
+weekly:
+  analytics_day: sunday
+  analytics_time: "08:00"
+
+# Guardrails
+one_job_at_a_time: true          # never start a second production while one runs
+max_runtime_minutes: 180

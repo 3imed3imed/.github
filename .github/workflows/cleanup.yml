@@ -1,0 +1,18 @@
+name: Cleanup
+
+on:
+  schedule:
+    - cron: "0 20 * * 0"   # Sunday 05:00 JST
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Prune intermediate render files
+        run: python -m app.cli cleanup

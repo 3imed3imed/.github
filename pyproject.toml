@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crime-youtube-factory"
+version = "0.1.0"
+description = "Cloud-first, zero-cost-by-default automation for a true-crime documentary YouTube channel about real, solved cases."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Crime YouTube Factory maintainers" }]
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.6",
+    "python-dotenv>=1.0",
+    "feedparser>=6.0",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+# Everything below is FREE / open-source software. It is NOT a paid API.
+media = [
+    "edge-tts>=6.1",   # Free Microsoft Edge neural TTS (no key)
+    "pillow>=10.0",    # Thumbnail / text-card rendering
+]
+dashboard = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
+youtube = [
+    # Only needed once the owner opts into uploading. Google client libs are free.
+    "google-api-python-client>=2.0",
+    "google-auth>=2.0",
+    "google-auth-oauthlib>=1.0",
+    "google-auth-httplib2>=0.2",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+crime-factory = "app.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["app*", "dashboard*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+exclude = [".venv", "data", "projects"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = ["E501", "B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]

@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Crime YouTube Factory — Dashboard</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#242833; --fg:#e7e9ee; --muted:#9aa1b1; --accent:#d24b4b; --ok:#4caf7d; --warn:#e0b04a; --fail:#e0574a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; }
+  header { padding:16px 22px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:14px; }
+  header h1 { font-size:16px; margin:0; letter-spacing:.3px; }
+  header .badge { font-size:11px; padding:3px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+  nav { display:flex; gap:4px; flex-wrap:wrap; padding:10px 18px; border-bottom:1px solid var(--line); }
+  nav button { background:transparent; border:1px solid transparent; color:var(--muted); padding:6px 12px; border-radius:8px; cursor:pointer; font-size:13px; }
+  nav button.active, nav button:hover { color:var(--fg); border-color:var(--line); background:var(--panel); }
+  main { padding:22px; max-width:1100px; margin:0 auto; }
+  .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card .k { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.5px; }
+  .card .v { font-size:26px; font-weight:600; margin-top:6px; }
+  table { width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); font-size:13px; }
+  th { color:var(--muted); font-weight:600; }
+  .pill { padding:2px 8px; border-radius:999px; font-size:11px; border:1px solid var(--line); }
+  .PASS,.CONNECTED,.free { color:var(--ok); } .WARN,.OPTIONAL,.free_tier { color:var(--warn); } .FAIL,.MISSING,.paid { color:var(--fail); }
+  .hidden { display:none; }
+  .section-title { margin:0 0 12px; font-size:15px; }
+  .muted { color:var(--muted); }
+  .overflow { overflow-x:auto; }
+  .epcard { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .ephead { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .eptitle { font-weight:600; font-size:14px; }
+  .btn { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:7px 12px; font-size:13px; cursor:pointer; }
+  .btn:hover { border-color:var(--accent); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.ghost { color:var(--muted); }
+  .studio { margin-top:12px; }
+  .studio:empty { margin:0; }
+  .player { width:100%; max-width:760px; border-radius:10px; background:#000; display:block; aspect-ratio:16/9; }
+  .edit { display:flex; flex-direction:column; gap:6px; max-width:760px; margin-top:12px; }
+  .edit label { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); }
+  .edit input, .edit textarea { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:9px 10px; font:inherit; font-size:13px; width:100%; }
+  .edit textarea { resize:vertical; line-height:1.5; }
+  .editbar { display:flex; align-items:center; gap:10px; margin-top:4px; }
+  .msg { font-size:12px; } .msg.ok { color:var(--ok); } .msg.fail { color:var(--fail); }
+  .studiogrid { display:grid; gap:14px; grid-template-columns:minmax(0,1fr) auto; align-items:start; }
+  @media (max-width:720px){ .studiogrid { grid-template-columns:1fr; } }
+  .thumb { width:220px; max-width:40vw; border-radius:8px; border:1px solid var(--line); display:block; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; }
+  button.chip:hover { border-color:var(--accent); }
+  .chip.PASS { color:var(--ok); } .chip.FAIL { color:var(--fail); }
+  .sources { margin:8px 0 0; padding-left:18px; } .sources li { margin:3px 0; font-size:13px; }
+  details summary { cursor:pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔎 Crime YouTube Factory</h1>
+  <span class="badge" id="tzBadge">—</span>
+  <span class="badge" id="modeBadge">—</span>
+  <span class="badge" id="costBadge">—</span>
+</header>
+<nav id="nav"></nav>
+<main id="main"></main>
+<script>
+const SCREENS = ["Overview","Story Queue","Production","Videos","Schedule","Produce","Providers","Accounts","Analytics","Logs"];
+let active = "Overview";
+
+async function j(u){ const r = await fetch(u); return r.json(); }
+
+// Escape any dynamic value before it goes into innerHTML. Defense-in-depth: the
+// current API surface only emits internal identifiers, but escaping here means
+// no future field (e.g. a story headline) can inject markup into the dashboard.
+function esc(v){
+  return String(v ?? "").replace(/[&<>"']/g, c => (
+    {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]
+  ));
+}
+
+// cls is an internal CSS token (status/cost-class), still escaped defensively.
+function pill(cls, text){ return `<span class="pill ${esc(cls)}">${esc(text)}</span>`; }
+
+// Only http(s) URLs may become clickable links. Source URLs originate from
+// external discovery adapters, so a javascript:/data: scheme must never reach
+// an href; anything else is rendered as inert escaped text by the caller.
+function safeUrl(u){
+  const s = String(u ?? "").trim();
+  return /^https?:\/\//i.test(s) ? s : "";
+}
+
+async function renderOverview(){
+  const o = await j("/api/overview");
+  document.getElementById("tzBadge").textContent = "TZ " + o.timezone;
+  document.getElementById("modeBadge").textContent = o.upload_enabled ? (o.public_auto_publish? "PUBLIC AUTO" : "PRIVATE UPLOAD") : "RENDER ONLY";
+  document.getElementById("costBadge").textContent = o.allow_paid ? "PAID ALLOWED" : "¥0 GUARD ON";
+  const cards = [
+    ["Stories tracked", o.total_stories],
+    ["Videos generated", o.videos_generated],
+    ["Ready", o.ready],
+    ["Published", o.published],
+    ["Upload mode", o.upload_enabled ? "on" : "render-only"],
+    ["Paid services", o.allow_paid ? "ALLOWED" : "blocked"],
+  ];
+  let html = `<div class="grid">` + cards.map(([k,v])=>`<div class="card"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join("") + `</div>`;
+  html += `<h3 class="section-title" style="margin-top:22px">State breakdown</h3><div class="overflow"><table><tr><th>State</th><th>Count</th></tr>` +
+    Object.entries(o.counts||{}).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("") + `</table></div>`;
+  return html;
+}
+
+async function renderStories(){
+  const s = await j("/api/stories");
+  const rows = Object.values(s).map(r=>`<tr><td>${esc(r.story_id)}</td><td>${pill("", r.state)}</td><td>${esc((r.meta&&r.meta.score)||"—")}</td><td class="muted">${(r.history&&r.history.length)||0} transitions</td></tr>`).join("");
+  return `<h3 class="section-title">Story Queue</h3><div class="overflow"><table><tr><th>Story</th><th>State</th><th>Score</th><th>History</th></tr>${rows||'<tr><td colspan=4 class="muted">No stories yet</td></tr>'}</table></div>`;
+}
+
+async function renderProduction(){
+  const p = await j("/api/production");
+  if(!p.length) return `<h3 class="section-title">Production</h3><p class="muted">No production runs yet.</p>`;
+  const rows = p.map(r=>{
+    const qc = r.qc_passed===true ? pill("PASS","QC ✓") : (r.qc_passed===false ? pill("FAIL","QC ✗") : "—");
+    const cost = `¥${esc(r.actual_cost)}`;
+    const syn = r.synthetic_media ? "AI-recon" : "—";
+    const fails = (r.qc_failures||[]).length ? `<div class="muted" style="font-size:11px">${esc((r.qc_failures||[]).join("; "))}</div>` : "";
+    return `<tr><td>${esc(r.story_id)}${fails}</td><td>${pill("",r.status||"—")}</td><td>${esc(r.stage)}</td><td>${qc}</td><td>${esc(r.upload_status||"—")}</td><td>${esc(r.privacy||"—")}</td><td>${syn}</td><td>${esc(r.elapsed_time)}s</td><td>${cost}</td></tr>`;
+  }).join("");
+  return `<h3 class="section-title">Production</h3><div class="overflow"><table><tr><th>Story</th><th>Status</th><th>Stage</th><th>QC</th><th>Upload</th><th>Privacy</th><th>Media</th><th>Elapsed</th><th>Cost</th></tr>${rows}</table></div>`;
+}
+
+async function renderVideos(){
+  const p = await j("/api/production");
+  const eps = p.filter(r=>r.has_final);
+  if(!eps.length) return `<h3 class="section-title">Episode Studio</h3><p class="muted">No rendered episodes yet. Produce one with <code>python -m app.run --story &lt;id&gt;</code>.</p>`;
+  const cards = eps.map(r=>`
+    <div class="epcard">
+      <div class="ephead">
+        <div><div class="eptitle">${esc(r.title||r.story_id)}</div>
+          <div class="muted" style="font-size:12px">${esc(r.story_id)} · ${r.qc_passed?pill("PASS","QC ✓"):pill("FAIL","QC ✗")} · ${esc(r.upload_status||"render-only")}</div></div>
+        <button class="btn" onclick="openStudio('${esc(r.story_id)}')">▶ Watch &amp; edit</button>
+      </div>
+      <div class="studio" id="studio-${esc(r.story_id)}"></div>
+    </div>`).join("");
+  return `<h3 class="section-title">Episode Studio</h3><p class="muted">Watch each full 1080p master and edit its title &amp; description — saved changes write back to disk.</p>${cards}`;
+}
+
+window.openStudio = async function(id){
+  const host=document.getElementById('studio-'+id);
+  if(host.dataset.open){ host.innerHTML=''; host.dataset.open=''; return; }
+  host.dataset.open='1'; host.innerHTML='<p class="muted">Loading…</p>';
+  const u=encodeURIComponent(id);
+  const e=await j('/api/episode/'+u);
+  const chapters=(e.chapters||[]).map(c=>`<button class="chip" onclick="seekTo(this,${Number(c.seconds)||0})">${esc(c.time)} · ${esc(c.label)}</button>`).join('');
+  const checks=Object.entries(e.qc_checks||{}).map(([k,v])=>`<span class="chip ${v?'PASS':'FAIL'}">${v?'✓':'✗'} ${esc(k.replace(/_/g,' '))}</span>`).join('');
+  const sources=(e.sources||[]).map(s=>{
+    const label=esc(s.title||s.id||'source'); const t=esc(s.source_type||''); const url=safeUrl(s.url);
+    return url? `<li><a href="${esc(url)}" target="_blank" rel="noopener">${label}</a> <span class="muted">${t}</span></li>` : `<li>${label} <span class="muted">${t}</span></li>`;
+  }).join('');
+  host.innerHTML=`
+    <div class="studiogrid">
+      <div>
+        <video controls playsinline preload="metadata" class="player" crossorigin="anonymous">
+          <source src="/api/video/${u}" type="video/mp4" />
+          ${e.has_captions?`<track kind="subtitles" srclang="en" label="English" default src="/api/captions/${u}/vtt" />`:''}
+        </video>
+        ${chapters?`<div class="chips" style="margin-top:8px">${chapters}</div>`:''}
+      </div>
+      ${e.has_thumbnail?`<div><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Thumbnail</div><img class="thumb" src="/api/thumbnail/${u}" alt="thumbnail" /></div>`:''}
+    </div>
+    ${checks?`<div class="chips" style="margin-top:12px">${checks}</div>`:''}
+    <div class="edit">
+      <label>Title</label>
+      <input id="t-${id}" value="${esc(e.title)}" maxlength="100" />
+      <label>Description</label>
+      <textarea id="d-${id}" rows="9">${esc(e.description)}</textarea>
+      <div class="editbar"><button class="btn primary" onclick="saveEpisode('${id}')">Save changes</button>
+        <a class="btn ghost" href="/api/captions/${u}" target="_blank">Captions</a>
+        <a class="btn ghost" href="/api/video/${u}" download="${u}.mp4">Download master</a>
+        <span id="msg-${id}" class="msg muted"></span></div>
+    </div>
+    ${sources?`<details style="margin-top:12px"><summary class="muted">${(e.sources||[]).length} sources</summary><ul class="sources">${sources}</ul></details>`:''}
+    <div class="muted" style="font-size:12px;margin-top:8px">${e.script_words} words · ${e.storyboard_scenes} scenes · AI media: ${e.synthetic_media?'yes':'no'}</div>`;
+};
+
+window.seekTo = function(btn, seconds){
+  // Find the player within the same studio panel — no story id in the handler.
+  const host=btn.closest('.studio');
+  const v=host && host.querySelector('video');
+  if(v){ v.currentTime=seconds; v.play&&v.play().catch(()=>{}); }
+};
+
+window.saveEpisode = async function(id){
+  const title=document.getElementById('t-'+id).value;
+  const description=document.getElementById('d-'+id).value;
+  const msg=document.getElementById('msg-'+id); msg.textContent='Saving…';
+  const r=await fetch('/api/episode/'+encodeURIComponent(id)+'/metadata',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,description})});
+  if(r.ok){ const d=await r.json(); msg.textContent='Saved · '+d.changed.join(', '); msg.className='msg ok'; }
+  else { const d=await r.json().catch(()=>({})); msg.textContent='Error: '+(d.detail||r.status); msg.className='msg fail'; }
+};
+
+function fmtClock(iso){
+  if(!iso) return "—";
+  try { return new Date(iso).toLocaleString([], {weekday:'short', hour:'2-digit', minute:'2-digit'}); }
+  catch(e){ return iso; }
+}
+function fmtIn(mins){
+  if(mins==null) return "";
+  if(mins<0) return "";
+  const h=Math.floor(mins/60), m=mins%60;
+  return h? `in ${h}h ${m}m` : `in ${m}m`;
+}
+
+async function renderSchedule(){
+  const s = await j("/api/schedule");
+  const mode = s.upload_enabled ? (s.public_auto_publish? "PUBLIC AUTO-PUBLISH" : "PRIVATE UPLOAD") : "RENDER ONLY";
+  let html = `<h3 class="section-title">Production Schedule</h3>
+    <p class="muted">Daily pipeline in <b>${esc(s.timezone)}</b>. Times are configured in <code>config/schedule.yml</code>; GitHub Actions runs them in UTC. Current mode: ${pill(s.upload_enabled?'PASS':'WARN', mode)}</p>`;
+
+  // Daily pipeline timeline.
+  const next = s.stages.reduce((a,b)=> (a==null || (b.in_minutes!=null && b.in_minutes < a.in_minutes)) ? b.in_minutes : a, null);
+  html += `<div class="overflow"><table><tr><th>Time</th><th>Stage</th><th>Next run</th><th></th></tr>` +
+    s.stages.map(st=>{
+      const soon = st.in_minutes===next && next!=null;
+      return `<tr${soon?' style="background:rgba(210,75,75,.08)"':''}><td><b>${esc(st.time)}</b></td><td>${esc(st.label)}</td><td class="muted">${esc(fmtClock(st.next_run))}</td><td class="muted">${esc(fmtIn(st.in_minutes))}${soon?' · next':''}</td></tr>`;
+    }).join("") + `</table></div>`;
+
+  // Weekly + guardrails.
+  const w = s.weekly||{}, g = s.guardrails||{};
+  html += `<div class="grid" style="margin-top:14px">
+    <div class="card"><div class="k">Weekly analytics</div><div class="v" style="font-size:18px">${esc((w.analytics_day||'—'))} ${esc(w.analytics_time||'')}</div></div>
+    <div class="card"><div class="k">One job at a time</div><div class="v" style="font-size:18px">${g.one_job_at_a_time?'yes':'no'}</div></div>
+    <div class="card"><div class="k">Max runtime</div><div class="v" style="font-size:18px">${esc(g.max_runtime_minutes??'—')} min</div></div>
+  </div>`;
+
+  // Publication queue.
+  const pubs = s.publications||[];
+  html += `<h3 class="section-title" style="margin-top:22px">Publication queue</h3>`;
+  if(!pubs.length){
+    html += `<p class="muted">No rendered episodes yet.</p>`;
+  } else {
+    html += `<div class="overflow"><table><tr><th>Episode</th><th>Stage</th><th>Privacy</th><th>Publish at</th><th>QC</th></tr>` +
+      pubs.map(p=>{
+        const qc = p.qc_passed===true? pill("PASS","QC ✓") : (p.qc_passed===false? pill("FAIL","QC ✗") : "—");
+        const stCls = p.stage==='scheduled'?'PASS':(p.stage==='uploaded'?'PASS':'WARN');
+        return `<tr><td>${esc(p.title)}<div class="muted" style="font-size:11px">${esc(p.story_id)}</div></td><td>${pill(stCls,p.stage)}</td><td>${esc(p.privacy)}</td><td class="muted">${esc(p.publish_at? fmtClock(p.publish_at) : (s.upload_enabled?'—':'render-only'))}</td><td>${qc}</td></tr>`;
+      }).join("") + `</table></div>`;
+  }
+  html += `<p class="muted" style="margin-top:10px">Publishing is gated: videos never go public automatically. A public video only happens via YouTube <code>publishAt</code> and only when the owner sets <code>PUBLIC_AUTO_PUBLISH=true</code>.</p>`;
+  return html;
+}
+
+let _produceTimer=null;
+async function renderProduce(){
+  const p = await j("/api/producible");
+  const rows = (p.stories||[]).map(s=>`
+    <tr>
+      <td>${esc(s.label)}<div class="muted" style="font-size:11px">${esc(s.story_id)}</div></td>
+      <td style="text-align:right"><button class="btn primary" data-produce="${esc(s.story_id)}" ${p.busy?'disabled':''} onclick="startProduce('${esc(s.story_id)}')">Produce</button></td>
+    </tr>`).join("");
+  const busy = p.busy ? `<p class="msg">${pill('WARN','running')} ${esc((p.running||[]).join(', '))} — one episode is produced at a time.</p>` : '';
+  return `<h3 class="section-title">Produce an episode</h3>
+    <p class="muted">Runs the full offline pipeline (research → verify → script → render → QC) locally, ¥0. A finished master appears in <b>Videos</b>. One job at a time.</p>
+    ${busy}
+    <div class="overflow"><table><tr><th>Story</th><th></th></tr>${rows||'<tr><td colspan=2 class="muted">Nothing producible yet.</td></tr>'}</table></div>
+    <div id="produceStatus" class="epcard" style="display:none;margin-top:14px"></div>`;
+}
+
+window.startProduce = async function(id){
+  const box=document.getElementById('produceStatus');
+  document.querySelectorAll('[data-produce]').forEach(b=>b.disabled=true);
+  const r=await fetch('/api/produce/'+encodeURIComponent(id),{method:'POST'});
+  if(!r.ok){ const d=await r.json().catch(()=>({})); box.style.display='block'; box.innerHTML=`<span class="msg fail">Could not start: ${esc(d.detail||r.status)}</span>`; document.querySelectorAll('[data-produce]').forEach(b=>b.disabled=false); return; }
+  box.style.display='block'; box.innerHTML=`<b>${esc(id)}</b> <span class="msg">starting…</span>`;
+  pollProduce(id);
+};
+
+async function pollProduce(id){
+  if(_produceTimer) clearTimeout(_produceTimer);
+  const box=document.getElementById('produceStatus'); if(!box) return;
+  let s; try { s=await j('/api/produce/'+encodeURIComponent(id)+'/status'); } catch(e){ return; }
+  const stage = s.pipeline_state? ` · stage: ${esc(s.pipeline_state)}` : '';
+  if(s.state==='running'){
+    box.innerHTML=`<b>${esc(id)}</b> ${pill('WARN','running')}${stage} <span class="muted">— this takes a few minutes.</span>`;
+    _produceTimer=setTimeout(()=>pollProduce(id), 3000);
+  } else if(s.state==='done'){
+    box.innerHTML=`<b>${esc(id)}</b> ${pill('PASS','done')} · QC ${s.qc_passed?'✓':'—'} · upload: ${esc(s.upload_status||'render-only')}. Open it in <b>Videos</b>.`;
+    document.querySelectorAll('[data-produce]').forEach(b=>b.disabled=false);
+  } else if(s.state==='error'){
+    box.innerHTML=`<b>${esc(id)}</b> ${pill('FAIL','error')} <span class="msg fail">${esc(s.error||'failed')}</span>`;
+    document.querySelectorAll('[data-produce]').forEach(b=>b.disabled=false);
+  } else {
+    box.innerHTML=`<b>${esc(id)}</b> <span class="muted">idle</span>`;
+  }
+}
+
+async function renderProviders(){
+  const p = await j("/api/providers");
+  const rows = p.map(x=>`<tr><td>${esc(x.provider)}</td><td>${esc(x.kind)}</td><td>${pill(x.cost_class,x.cost_class)}</td><td>${esc(x.quota??"∞")}</td><td>${esc(x.requests)}</td><td>${esc(x.failures)}</td><td>${x.available?"yes":"no"}</td><td class="muted">${esc(x.fallback||"—")}</td><td>¥${esc(x.actual_cost_yen)}</td></tr>`).join("");
+  return `<h3 class="section-title">Provider / Fallback Matrix</h3><div class="overflow"><table><tr><th>Provider</th><th>Kind</th><th>Cost</th><th>Quota</th><th>Req</th><th>Fail</th><th>Avail</th><th>Fallback</th><th>Actual ¥</th></tr>${rows}</table></div>`;
+}
+
+async function renderAccounts(){
+  const c = await j("/api/connectors");
+  const rows = c.map(x=>`<tr><td>${esc(x.name)}</td><td>${pill(x.state,x.state)}</td><td class="muted">${esc(x.purpose)}</td></tr>`).join("");
+  return `<h3 class="section-title">Accounts / Connectors <span class="muted">(secrets never shown)</span></h3><div class="overflow"><table><tr><th>Service</th><th>Status</th><th>Purpose</th></tr>${rows}</table></div>`;
+}
+
+async function renderAnalytics(){
+  const a = await j("/api/analytics");
+  let html = `<h3 class="section-title">Weekly Analytics</h3><div class="card"><div class="k">Videos considered</div><div class="v">${esc(a.videos_considered)}</div><p class="muted">${esc(a.note)}</p><p class="muted">Safety rules unchanged: ${esc(a.safety_rules_unchanged)}</p></div>`;
+  if((a.recommendations||[]).length){
+    html += `<div class="overflow" style="margin-top:14px"><table><tr><th>Dimension</th><th>Signal</th><th>Weight Δ</th></tr>` + a.recommendations.map(r=>`<tr><td>${esc(r.dimension)}</td><td>${esc(r.signal)}</td><td>${esc(r.weight_delta)}</td></tr>`).join("") + `</table></div>`;
+  }
+  return html;
+}
+
+async function renderLogs(){
+  const h = await j("/api/health"); const al = await j("/api/alerts");
+  let html = `<h3 class="section-title">Health</h3><div class="overflow"><table><tr><th>Check</th><th>Status</th><th>Detail</th></tr>` +
+    h.map(c=>`<tr><td>${esc(c.name)}</td><td>${pill(c.status,c.status)}</td><td class="muted">${esc(c.detail)}</td></tr>`).join("") + `</table></div>`;
+  html += `<h3 class="section-title" style="margin-top:22px">Recent alerts</h3>`;
+  html += al.length ? `<div class="overflow"><table><tr><th>Time</th><th>Title</th></tr>` + al.map(a=>`<tr><td class="muted">${esc(a.created_at||"")}</td><td>${esc(a.title||"")}</td></tr>`).join("") + `</table></div>` : `<p class="muted">No alerts logged.</p>`;
+  return html;
+}
+
+const RENDERERS = { "Overview":renderOverview, "Story Queue":renderStories, "Production":renderProduction, "Videos":renderVideos, "Schedule":renderSchedule, "Produce":renderProduce, "Providers":renderProviders, "Accounts":renderAccounts, "Analytics":renderAnalytics, "Logs":renderLogs };
+
+function buildNav(){
+  const nav = document.getElementById("nav");
+  nav.innerHTML = SCREENS.map(s=>`<button data-s="${s}" class="${s===active?'active':''}">${s}</button>`).join("");
+  nav.querySelectorAll("button").forEach(b=>b.onclick=()=>{ active=b.dataset.s; buildNav(); paint(); });
+}
+async function paint(){
+  const main = document.getElementById("main");
+  main.innerHTML = `<p class="muted">Loading…</p>`;
+  try { main.innerHTML = await (RENDERERS[active]||renderOverview)(); }
+  catch(e){ main.innerHTML = `<p class="FAIL">Error: ${e}</p>`; }
+}
+buildNav(); paint();
+</script>
+</body>
+</html>

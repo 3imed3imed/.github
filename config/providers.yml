@@ -1,0 +1,39 @@
+# Provider / fallback matrix (documentation mirror of app/providers/*).
+# cost_class: free | free_tier | paid  (paid is BLOCKED unless ALLOW_PAID_SERVICES=true)
+
+llm:
+  - name: openrouter
+    cost_class: free_tier
+    note: "free models only; automatic model fallback"
+  - name: offline-llm
+    cost_class: free
+    note: "deterministic template writer; always available"
+
+tts:
+  - name: edge-tts
+    cost_class: free
+  - name: silent-tts
+    cost_class: free
+    note: "timed silent WAV fallback"
+
+video:
+  - name: agnes
+    cost_class: free_tier
+    note: "experimental AI text/image-to-video; optional"
+  - name: still-motion
+    cost_class: free
+    note: "Ken Burns over a still; renders every episode without AI video"
+
+stock:
+  - name: pexels
+    cost_class: free_tier
+  - name: pixabay
+    cost_class: free_tier
+  - name: generated
+    cost_class: free
+    note: "owned generated cards; always license-clean"
+
+legal:
+  - name: courtlistener
+    cost_class: free_tier
+    note: "anonymous access works; token raises limits"

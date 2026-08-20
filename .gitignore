@@ -1,0 +1,24 @@
+# Secrets & local config
+.env
+.env.local
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Runtime state & artifacts (never commit generated media/state)
+data/
+projects/
+*.mp4
+*.wav
+*.mp3
+*.log
+
+# OS
+.DS_Store
